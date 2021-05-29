@@ -7,7 +7,7 @@ use ndarray_linalg::types::{Lapack, Scalar};
 use ndarray_linalg::SVDDCInto;
 use ndarray_linalg::UVTFlag;
 
-pub fn compress_svd<'a, T: Scalar + Lapack, M: ArrayProvider<T>>(
+pub fn compress_svd<T: Scalar + Lapack, M: ArrayProvider<T>>(
     mat: M,
     compression_type: CompressionType,
 ) -> (Array2<T>, Array2<T>) {
@@ -66,4 +66,31 @@ fn low_rank_from_reduced_svd<T: Scalar>(
     } else {
         (u, vt)
     }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::Rng;
+    use ndarray_linalg::QR;
+
+
+    fn get_matrix(m: usize, n: usize, tol: f64) {
+
+        let mut rng = rand::thread_rng();
+
+
+        let mut v = Array2::<f64>::zeros((m, n));
+        v.map_inplace(|item| *item = rng.gen::<f64>());
+
+        let (v, _) =  v.qr().unwrap();
+
+
+
+        
+    }
+
+    //#[test]
+
 }
