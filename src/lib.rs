@@ -1,6 +1,6 @@
+pub mod random;
 pub mod traits;
 pub mod svd_compressor;
-
 
 pub enum CompressionType {
     /// Adaptive compression with a specified tolerance
@@ -8,3 +8,5 @@ pub enum CompressionType {
     /// Rank based compression with specified rank
     RANK(usize),
 }
+
+pub use random::*;

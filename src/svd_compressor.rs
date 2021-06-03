@@ -72,6 +72,7 @@ fn low_rank_from_reduced_svd<T: Scalar>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::random::Random;
     use rand::Rng;
     use ndarray_linalg::QR;
 
@@ -79,15 +80,6 @@ mod tests {
     fn get_matrix(m: usize, n: usize, tol: f64) {
 
         let mut rng = rand::thread_rng();
-
-
-        let mut v = Array2::<f64>::zeros((m, n));
-        v.map_inplace(|item| *item = rng.gen::<f64>());
-
-        let (v, _) =  v.qr().unwrap();
-
-
-
         
     }
 

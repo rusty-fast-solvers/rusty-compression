@@ -1,11 +1,9 @@
 use ndarray::{Array2, Axis};
-use ndarray_linalg::*;
 use ndarray_linalg::UVTFlag;
+use ndarray_linalg::*;
 use rand::Rng;
 
-
 pub fn main() {
-
     let nrows = 10;
     let ncols = 5;
 
@@ -20,10 +18,12 @@ pub fn main() {
     let u_mat = u_mat.unwrap();
     let vt_mat = vt_mat.unwrap();
 
-    println!("Shape: {}x{}", vt_mat.len_of(Axis(0)), vt_mat.len_of(Axis(1)));
+    println!(
+        "Shape: {}x{}",
+        vt_mat.len_of(Axis(0)),
+        vt_mat.len_of(Axis(1))
+    );
 
     println!("Success.")
-
-
-
 }
+
