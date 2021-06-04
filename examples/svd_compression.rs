@@ -1,29 +1,28 @@
-use ndarray::{Array2, Axis};
-use ndarray_linalg::UVTFlag;
-use ndarray_linalg::*;
-use rand::Rng;
+use rusty_compression::*;
+use ndarray::Axis;
 
 pub fn main() {
-    let nrows = 10;
-    let ncols = 5;
 
-    let flag = UVTFlag::Some;
+    let m: usize = 100;
+    let n: usize = 50;
+
+    let tol = 1E-5;
+
+    let sigma_max = 1.0;
+    let sigma_min = 1E-15;
+
 
     let mut rng = rand::thread_rng();
-    let mut mat = Array2::<f64>::zeros((nrows, ncols));
-    mat.map_inplace(|item| *item = rng.gen::<f64>());
+    let mat = f64::random_approximate_low_rank_matrix((m, n), sigma_max, sigma_min, &mut rng);
 
-    let (u_mat, sigma, vt_mat) = mat.svddc(flag).unwrap();
+    let (a, bt) = compress_svd(mat.view(), CompressionType::ADAPTIVE(tol)).unwrap();
 
-    let u_mat = u_mat.unwrap();
-    let vt_mat = vt_mat.unwrap();
+    let rel_diff = a.dot(&bt).rel_diff(&mat);
 
-    println!(
-        "Shape: {}x{}",
-        vt_mat.len_of(Axis(0)),
-        vt_mat.len_of(Axis(1))
-    );
 
-    println!("Success.")
+    println!("Compressiong a matrix with rank {}", n);
+    println!("The rank of the compressed matrix is {}.", a.len_of(Axis(1)));
+    println!("The estimated compression error is {}.", rel_diff);
+
 }
 

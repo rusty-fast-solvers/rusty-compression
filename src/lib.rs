@@ -9,4 +9,6 @@ pub enum CompressionType {
     RANK(usize),
 }
 
+pub use traits::*;
 pub use random::*;
+pub use svd_compressor::*;

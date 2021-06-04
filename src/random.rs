@@ -19,27 +19,39 @@ pub trait Random {
     /// * `rng`: The random number generator to use.
     fn random_gaussian<R: Rng>(dimension: (usize, usize), rng: &mut R) -> Array2<Self::T>;
 
-    /// Generate a random orthogonal matrix.
+    /// Generate a random matrix with orthogonal rows or columns.
     ///
-    /// This function creates a normally distributed random matrix,
+    /// This function creates a normally distributed (m, n) random matrix,
     /// orthogonalizes it and returns the resulting orthogonal matrix.
+    ///
+    /// If m > n then the returned matrix has orthogonal columns. If n > m
+    /// the returned matrix has orthogonalized rows.
     ///
     /// # Arguments
     ///
     /// * `dimension`: Tuple (rows, cols) specifying the number of rows and columns.
     /// * `rng`: The random number generator to use.
     fn random_orthogonal_matrix<R: Rng>(dimension: (usize, usize), rng: &mut R) -> Array2<Self::T> {
-        assert!(
-            dimension.0 >= dimension.1,
-            "Matrix must have at least as many rows as columns."
-        );
+        let mut m = dimension.0;
+        let mut n = dimension.1;
 
-        let mat = Self::random_gaussian(dimension, rng);
+        // Always ensure that we form the QR decomp for a long and skinny matrix
+        if dimension.1 > dimension.0 {
+            std::mem::swap(&mut m, &mut n);
+        }
+
+        let mat = Self::random_gaussian((m, n), rng);
 
         let (u, _, _) = mat
             .svddc_into(UVTFlag::Some)
             .expect("`compress_svd_rank_based`: SVD computation failed.");
-        u.unwrap()
+
+        // If we originally had more columns than rows, conjugate transpose again.
+        if dimension.1 > dimension.0 {
+            u.unwrap().t().map(|item| item.conj())
+        } else {
+            u.unwrap()
+        }
     }
 
     /// Generate a random approximate low-rank matrix.
@@ -62,18 +74,21 @@ pub trait Random {
     ) -> Array2<Self::T> {
         use ndarray::Array;
 
-        assert!(sigma_min < sigma_max, "`sigma_min` must be smaller than `sigma_max`");
+        assert!(
+            sigma_min < sigma_max,
+            "`sigma_min` must be smaller than `sigma_max`"
+        );
         assert!(sigma_min > 0.0, "`sigma_min` must be positive.");
 
         let min_dim = std::cmp::min(dimension.0, dimension.1);
 
-        let q1 = Self::random_orthogonal_matrix((dimension.0, min_dim), rng);
-        let q2 = Self::random_orthogonal_matrix((min_dim, dimension.1), rng);
+        let u = Self::random_orthogonal_matrix((dimension.0, min_dim), rng);
+        let vt = Self::random_orthogonal_matrix((min_dim, dimension.1), rng);
         let singvals = Array::geomspace(sigma_min, sigma_max, min_dim)
             .unwrap()
             .map(|&item| cast::<f64, Self::T>(item).unwrap());
         let sigma = Array2::from_diag(&singvals);
-        q1.dot(&sigma.dot(&q2))
+        u.dot(&sigma.dot(&vt))
     }
 }
 
