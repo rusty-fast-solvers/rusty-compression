@@ -1,5 +1,6 @@
 pub mod random;
 pub mod traits;
+pub mod pivoted_qr;
 pub mod svd_compressor;
 
 pub enum CompressionType {

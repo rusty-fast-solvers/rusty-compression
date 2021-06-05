@@ -16,7 +16,6 @@ name = "rusty_compression"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
-rusty-kernel-tools = "0.1"
 num = "0.3"
 ndarray = { version = "0.14", features = ["rayon"] }
 ndarray-linalg = { version = "0.13", features = ["netlib-system"] }
@@ -24,7 +23,7 @@ rand = "0.8"
 itertools = "0.10"
 rayon = "1.5"
 rand_distr = "0.4"
-lapack = "0.18"
+lapack = "0.17"
 lax = "0.1"
 
 [dev-dependencies]
