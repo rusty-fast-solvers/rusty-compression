@@ -3,43 +3,31 @@
 //! implemented in ndarray-linalg, making this module necessary.
 
 use ndarray::{Array1, Array2, ArrayBase, Data, Ix2, ShapeBuilder};
-use ndarray_linalg::{Lapack, Scalar};
 
-pub trait PivotedQR
+pub trait PivotedQR {
+    type Q;
+    type R;
+
+    fn pivoted_qr(&self) -> Result<(Self::Q, Self::R, Array1<usize>), &'static str>;
+}
+
+impl<A, S> PivotedQR for ArrayBase<S, Ix2>
 where
-    Self: Scalar + Lapack,
+    A: imp::PivotedQRImpl,
+    S: Data<Elem = A>,
 {
-    fn pivoted_qr<S: Data<Elem = Self>>(
-        mat: ArrayBase<S, Ix2>,
-    ) -> Result<(Array2<Self>, Array2<Self>, Array1<usize>), &'static str>;
+    type Q = Array2<A>;
+    type R = Array2<A>;
+
+    fn pivoted_qr(&self) -> Result<(Self::Q, Self::R, Array1<usize>), &'static str> {
+        let m = self.nrows();
+        let n = self.ncols();
+
+        let mut mat_fortran = Array2::<A>::zeros((m, n).f());
+        mat_fortran.assign(&self);
+        A::pivoted_qr_impl(mat_fortran)
+    }
 }
-
-macro_rules! pivoted_qr {
-    ($scalar:ty) => {
-        impl PivotedQR for $scalar
-        where
-            Self: Scalar + Lapack,
-        {
-            fn pivoted_qr<S: Data<Elem = Self>>(
-                mat: ArrayBase<S, Ix2>,
-            ) -> Result<(Array2<Self>, Array2<Self>, Array1<usize>), &'static str> {
-                use imp::PivotedQRImpl;
-
-                let m = mat.nrows();
-                let n = mat.ncols();
-
-                let mut mat_fortran = Array2::<Self>::zeros((m, n).f());
-                mat_fortran.assign(&mat);
-                Self::pivoted_qr_impl(mat_fortran)
-            }
-        }
-    };
-}
-
-pivoted_qr!(f64);
-pivoted_qr!(f32);
-pivoted_qr!(ndarray_linalg::c64);
-pivoted_qr!(ndarray_linalg::c32);
 
 mod imp {
 
@@ -199,6 +187,7 @@ mod tests {
         fn $name() {
             use crate::Random;
             use ndarray_linalg::Norm;
+            use ndarray_linalg::Scalar;
 
             let m = $dim.0;
             let n = $dim.1;
@@ -206,7 +195,7 @@ mod tests {
             let mut rng = rand::thread_rng();
             let mat = <$scalar>::random_approximate_low_rank_matrix((m, n), 1.0, 1E-5, &mut rng);
 
-            let (q, r, indices) = <$scalar>::pivoted_qr(mat.view()).unwrap();
+            let (q, r, indices) = mat.pivoted_qr().unwrap();
 
             let prod = q.dot(&r);
 
