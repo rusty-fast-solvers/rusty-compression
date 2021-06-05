@@ -33,7 +33,7 @@ where
     }
 }
 
-fn compress_svd<T: Scalar + Lapack, M: ArrayProvider<T>>(
+pub fn compress_svd<T: Scalar + Lapack, M: ArrayProvider<T>>(
     mat: M,
     compression_type: CompressionType,
 ) -> Result<(Array2<T>, Array2<T>), &'static str> {
