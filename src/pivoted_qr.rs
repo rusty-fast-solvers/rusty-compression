@@ -5,32 +5,41 @@
 use ndarray::{Array1, Array2, ArrayBase, Data, Ix2, ShapeBuilder};
 use ndarray_linalg::{Lapack, Scalar};
 
-pub trait PivotedQR {
-    type T: Scalar + Lapack;
-
-    fn pivoted_qr(&self)
-        -> Result<(Array2<Self::T>, Array2<Self::T>, Array1<usize>), &'static str>;
-}
-
-impl<S> PivotedQR for ArrayBase<S, Ix2>
+pub trait PivotedQR
 where
-    S: Data<Elem = f64>,
+    Self: Scalar + Lapack,
 {
-    type T = f64;
-
-    fn pivoted_qr(
-        &self,
-    ) -> Result<(Array2<Self::T>, Array2<Self::T>, Array1<usize>), &'static str> {
-        use imp::PivotedQRImpl;
-
-        let m = self.nrows();
-        let n = self.ncols();
-
-        let mut mat_fortran = Array2::<Self::T>::zeros((m, n).f());
-        mat_fortran.assign(&self);
-        Self::T::pivoted_qr_impl(mat_fortran)
-    }
+    fn pivoted_qr<S: Data<Elem = Self>>(
+        mat: ArrayBase<S, Ix2>,
+    ) -> Result<(Array2<Self>, Array2<Self>, Array1<usize>), &'static str>;
 }
+
+macro_rules! pivoted_qr {
+    ($scalar:ty) => {
+        impl PivotedQR for $scalar
+        where
+            Self: Scalar + Lapack,
+        {
+            fn pivoted_qr<S: Data<Elem = Self>>(
+                mat: ArrayBase<S, Ix2>,
+            ) -> Result<(Array2<Self>, Array2<Self>, Array1<usize>), &'static str> {
+                use imp::PivotedQRImpl;
+
+                let m = mat.nrows();
+                let n = mat.ncols();
+
+                let mut mat_fortran = Array2::<Self>::zeros((m, n).f());
+                mat_fortran.assign(&mat);
+                Self::pivoted_qr_impl(mat_fortran)
+            }
+        }
+    };
+}
+
+pivoted_qr!(f64);
+pivoted_qr!(f32);
+pivoted_qr!(ndarray_linalg::c64);
+pivoted_qr!(ndarray_linalg::c32);
 
 mod imp {
 
@@ -115,7 +124,7 @@ mod imp {
                     let mut info = 0;
                     let mut work_size = [Self::zero()];
                     let mut jpvt = ndarray::Array1::<i32>::zeros(n as usize);
-                    
+
                     $(
                     let mut $rwork_ident = ndarray::Array1::<Self::Real>::zeros(2 * (n as usize));
                     )*
@@ -173,4 +182,69 @@ mod imp {
     impl_qr_pivot!(@real, f32, lapack::sgeqp3);
     impl_qr_pivot!(@complex, num::complex::Complex<f64>, lapack::zgeqp3);
     impl_qr_pivot!(@complex, num::complex::Complex<f32>, lapack::cgeqp3);
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    macro_rules! pivoted_qr_tests {
+
+    ($($name:ident: $scalar:ty, $dim:expr,)*) => {
+
+        $(
+
+        #[test]
+        fn $name() {
+            use crate::Random;
+            use ndarray_linalg::Norm;
+
+            let m = $dim.0;
+            let n = $dim.1;
+
+            let mut rng = rand::thread_rng();
+            let mat = <$scalar>::random_approximate_low_rank_matrix((m, n), 1.0, 1E-5, &mut rng);
+
+            let (q, r, indices) = <$scalar>::pivoted_qr(mat.view()).unwrap();
+
+            let prod = q.dot(&r);
+
+            // Check orthogonality of Q.T x Q
+
+            let qtq = q.t().map(|&item| item.conj()).dot(&q);
+
+            for ((i, j), &val) in qtq.indexed_iter() {
+                if i == j {
+                    let rel_diff = (val - 1.0).abs();
+                    assert!(rel_diff < 1E-6);
+                } else {
+                    assert!(val.abs() < 1E-6);
+                }
+            }
+
+            // Check that the product is correct.
+
+            for (col_index, col) in prod.axis_iter(ndarray::Axis(1)).enumerate() {
+                let perm_index = indices[col_index];
+                let diff = col.to_owned() - mat.index_axis(ndarray::Axis(1), perm_index);
+                let rel_diff = diff.norm_l2() / mat.index_axis(ndarray::Axis(1), perm_index).norm_l2();
+
+                assert!(rel_diff < 1E-6);
+            }
+        }
+                )*
+            };
+        }
+
+    pivoted_qr_tests! {
+        pivoted_qr_test_thin_f64: f64, (100, 50),
+        pivoted_qr_test_thin_f32: f32, (100, 50),
+        pivoted_qr_test_thin_c64: ndarray_linalg::c64, (100, 50),
+        pivoted_qr_test_thin_c32: ndarray_linalg::c32, (100, 50),
+        pivoted_qr_test_thick_f64: f64, (50, 100),
+        pivoted_qr_test_thick_f32: f32, (50, 100),
+        pivoted_qr_test_thick_c64: ndarray_linalg::c64, (50, 100),
+        pivoted_qr_test_thick_c32: ndarray_linalg::c32, (50, 100),
+    }
 }
