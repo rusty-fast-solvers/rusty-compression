@@ -15,7 +15,7 @@ pub fn main() {
     let mut rng = rand::thread_rng();
     let mat = f64::random_approximate_low_rank_matrix((m, n), sigma_max, sigma_min, &mut rng);
 
-    let (a, bt) = compress_svd(mat.view(), CompressionType::ADAPTIVE(tol)).unwrap();
+    let (a, bt) = mat.compress_svd(CompressionType::ADAPTIVE(tol)).unwrap();
 
     let rel_diff = a.dot(&bt).rel_diff(&mat);
 

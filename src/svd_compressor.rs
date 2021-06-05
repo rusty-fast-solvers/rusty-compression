@@ -2,12 +2,38 @@
 
 use super::CompressionType;
 use crate::traits::ArrayProvider;
-use ndarray::{s, Array1, Array2, ArrayView2, Axis, Zip};
+use ndarray::{s, Array1, Array2, ArrayBase, ArrayView2, Axis, Data, Ix2, Zip};
 use ndarray_linalg::types::{Lapack, Scalar};
 use ndarray_linalg::SVDDCInto;
 use ndarray_linalg::UVTFlag;
 
-pub fn compress_svd<T: Scalar + Lapack, M: ArrayProvider<T>>(
+pub trait SVDCompressor {
+    type C;
+    type R;
+
+    fn compress_svd(
+        &self,
+        compression_type: CompressionType,
+    ) -> Result<(Self::C, Self::R), &'static str>;
+}
+
+impl<A, S> SVDCompressor for ArrayBase<S, Ix2>
+where
+    A: Scalar + Lapack,
+    S: Data<Elem = A>,
+{
+    type C = Array2<A>;
+    type R = Array2<A>;
+
+    fn compress_svd(
+        &self,
+        compression_type: CompressionType,
+    ) -> Result<(Self::C, Self::R), &'static str> {
+        compress_svd(self.view(), compression_type)
+    }
+}
+
+fn compress_svd<T: Scalar + Lapack, M: ArrayProvider<T>>(
     mat: M,
     compression_type: CompressionType,
 ) -> Result<(Array2<T>, Array2<T>), &'static str> {
@@ -17,7 +43,7 @@ pub fn compress_svd<T: Scalar + Lapack, M: ArrayProvider<T>>(
     }
 }
 
-pub fn compress_svd_rank<T: Scalar + Lapack>(
+fn compress_svd_rank<T: Scalar + Lapack>(
     mat: ArrayView2<T>,
     max_rank: usize,
 ) -> Result<(Array2<T>, Array2<T>), &'static str> {
@@ -34,7 +60,7 @@ pub fn compress_svd_rank<T: Scalar + Lapack>(
     ))
 }
 
-pub fn compress_svd_tolerance<T: Scalar + Lapack>(
+fn compress_svd_tolerance<T: Scalar + Lapack>(
     mat: ArrayView2<T>,
     tol: f64,
 ) -> Result<(Array2<T>, Array2<T>), &'static str> {
@@ -97,7 +123,7 @@ mod tests {
         let mut rng = rand::thread_rng();
         let mat = f64::random_approximate_low_rank_matrix((m, n), sigma_max, sigma_min, &mut rng);
 
-        let (a, bt) = compress_svd(mat.view(), CompressionType::RANK(rank)).unwrap();
+        let (a, bt) = mat.compress_svd(CompressionType::RANK(rank)).unwrap();
 
         assert!(a.len_of(Axis(0)) == m);
         assert!(a.len_of(Axis(1)) == rank);
@@ -117,7 +143,7 @@ mod tests {
         let mut rng = rand::thread_rng();
         let mat = f64::random_approximate_low_rank_matrix((m, n), sigma_max, sigma_min, &mut rng);
 
-        let (a, bt) = compress_svd(mat.view(), CompressionType::ADAPTIVE(tol)).unwrap();
+        let (a, bt) = mat.compress_svd(CompressionType::ADAPTIVE(tol)).unwrap();
 
         assert!(a.len_of(Axis(0)) == m);
         assert!(bt.len_of(Axis(1)) == n);
