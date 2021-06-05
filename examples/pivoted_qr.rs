@@ -103,8 +103,8 @@ fn pivoted_qr_decomp(
 }
 
 pub fn main() {
-    let m = 30;
-    let n = 50;
+    let m = 1000;
+    let n = 1000;
 
     let mut rng = rand::thread_rng();
     let mat = f64::random_approximate_low_rank_matrix((m, n), 1.0, 1E-10, &mut rng);
@@ -115,6 +115,21 @@ pub fn main() {
     println!("R shape: {} x {}", r.nrows(), r.ncols());
 
     let prod = q.dot(&r);
+
+    // Check orthogonality of Q.T x Q
+
+    let qtq = q.t().dot(&q);
+
+    for ((i, j), &val) in qtq.indexed_iter() {
+        if i == j {
+            let rel_diff = (val - 1.0).abs();
+            assert!(rel_diff < 1E-10);
+        } else {
+            assert!(val.abs() < 1E-10);
+        }
+    }
+
+    // Check that the product is correct.
 
     for (col_index, col) in prod.axis_iter(ndarray::Axis(1)).enumerate() {
         let perm_index = indices[col_index];
