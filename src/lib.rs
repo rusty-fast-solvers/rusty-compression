@@ -2,6 +2,7 @@ pub mod random;
 pub mod traits;
 pub mod pivoted_qr;
 pub mod svd_compressor;
+pub mod interpolative;
 
 pub enum CompressionType {
     /// Adaptive compression with a specified tolerance

@@ -3,23 +3,33 @@
 //! implemented in ndarray-linalg, making this module necessary.
 
 use ndarray::{Array1, Array2, ArrayBase, Data, Ix2, ShapeBuilder};
+use ndarray_linalg::{Lapack, Scalar};
+
+pub struct PivotedQRResult<T: Scalar + Lapack> {
+    /// The Q matrix from the QR Decomposition
+    pub q: Array2<T>,
+    /// The R matrix from the QR Decomposition
+    pub r: Array2<T>,
+    /// An index array. If ind[j] = k then the
+    /// jth column of Q * R is identical to the
+    /// kth column of the original matrix A.
+    pub ind: Array1<usize>,
+}
 
 pub trait PivotedQR {
-    type Q;
-    type R;
+    type Q: Scalar + Lapack;
 
-    fn pivoted_qr(&self) -> Result<(Self::Q, Self::R, Array1<usize>), &'static str>;
+    fn pivoted_qr(&self) -> Result<PivotedQRResult<Self::Q>, &'static str>;
 }
 
 impl<A, S> PivotedQR for ArrayBase<S, Ix2>
 where
-    A: imp::PivotedQRImpl,
+    A: imp::PivotedQRImpl + Scalar + Lapack,
     S: Data<Elem = A>,
 {
-    type Q = Array2<A>;
-    type R = Array2<A>;
+    type Q = A;
 
-    fn pivoted_qr(&self) -> Result<(Self::Q, Self::R, Array1<usize>), &'static str> {
+    fn pivoted_qr(&self) -> Result<PivotedQRResult<A>, &'static str> {
         let m = self.nrows();
         let n = self.ncols();
 
@@ -41,9 +51,8 @@ mod imp {
     where
         Self: Scalar + Lapack,
     {
-        fn pivoted_qr_impl(
-            mat: Array2<Self>,
-        ) -> Result<(Array2<Self>, Array2<Self>, Array1<usize>), &'static str>;
+        fn pivoted_qr_impl(mat: Array2<Self>)
+            -> Result<super::PivotedQRResult<Self>, &'static str>;
         fn pivoted_qr_decomp(
             mat: &mut [Self],
             layout: MatrixLayout,
@@ -62,7 +71,7 @@ mod imp {
             impl PivotedQRImpl for $scalar {
                 fn pivoted_qr_impl(
                     mut mat: Array2<Self>,
-                ) -> Result<(Array2<Self>, Array2<Self>, Array1<usize>), &'static str> {
+                ) -> Result<super::PivotedQRResult<$scalar>, &'static str> {
                     let m = mat.nrows();
                     let n = mat.ncols();
                     let k = m.min(n);
@@ -97,7 +106,7 @@ mod imp {
 
                     // Finally, return the QR decomposition.
 
-                    Ok((q_mat, r_mat, jpvt))
+                    Ok(super::PivotedQRResult{q: q_mat, r:r_mat, ind: jpvt})
                 }
 
                 fn pivoted_qr_decomp(
@@ -195,13 +204,13 @@ mod tests {
             let mut rng = rand::thread_rng();
             let mat = <$scalar>::random_approximate_low_rank_matrix((m, n), 1.0, 1E-5, &mut rng);
 
-            let (q, r, indices) = mat.pivoted_qr().unwrap();
+            let qr_result = mat.pivoted_qr().unwrap();
 
-            let prod = q.dot(&r);
+            let prod = qr_result.q.dot(&qr_result.r);
 
             // Check orthogonality of Q.T x Q
 
-            let qtq = q.t().map(|&item| item.conj()).dot(&q);
+            let qtq = qr_result.q.t().map(|&item| item.conj()).dot(&qr_result.q);
 
             for ((i, j), &val) in qtq.indexed_iter() {
                 if i == j {
@@ -215,7 +224,7 @@ mod tests {
             // Check that the product is correct.
 
             for (col_index, col) in prod.axis_iter(ndarray::Axis(1)).enumerate() {
-                let perm_index = indices[col_index];
+                let perm_index = qr_result.ind[col_index];
                 let diff = col.to_owned() - mat.index_axis(ndarray::Axis(1), perm_index);
                 let rel_diff = diff.norm_l2() / mat.index_axis(ndarray::Axis(1), perm_index).norm_l2();
 
