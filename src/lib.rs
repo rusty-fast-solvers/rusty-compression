@@ -1,16 +1,19 @@
+pub mod permutation;
 pub mod random;
 pub mod traits;
 pub mod pivoted_qr;
-pub mod svd_compressor;
-pub mod interpolative;
+//pub mod compute_svd;
+//pub mod svd_compression;
+pub mod prelude;
+pub mod svd_container;
+pub mod qr_container;
 
-pub enum CompressionType {
-    /// Adaptive compression with a specified tolerance
-    ADAPTIVE(f64),
-    /// Rank based compression with specified rank
-    RANK(usize),
-}
 
-pub use traits::*;
-pub use random::*;
-pub use svd_compressor::*;
+
+//pub mod interp_decomp;
+
+
+type Result<T> = std::result::Result<T, &'static str>;
+
+//pub use compute_svd::ComputeSVD;
+//pub use svd_compression::CompressSVD;

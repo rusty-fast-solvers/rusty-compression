@@ -5,7 +5,7 @@ use ndarray_linalg::layout::AllocatedArray;
 use ndarray_linalg::IntoTriangular;
 use ndarray_linalg::Norm;
 use num::traits::ToPrimitive;
-use rusty_compression::Random;
+use rusty_compression::prelude::Random;
 
 pub fn pivoted_qr(mat: ArrayView2<f64>) -> (Array2<f64>, Array2<f64>, Array1<usize>) {
     let m = mat.nrows();

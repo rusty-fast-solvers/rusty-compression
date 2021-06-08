@@ -2,42 +2,39 @@
 //! corresponding Lapack routine. Pivoted QR is currently not
 //! implemented in ndarray-linalg, making this module necessary.
 
-use ndarray::{Array1, Array2, ArrayBase, Data, Ix2, ShapeBuilder};
+use ndarray::{Array2, ArrayBase, Data, Ix2, ShapeBuilder};
 use ndarray_linalg::{Lapack, Scalar};
-
-pub struct PivotedQRResult<T: Scalar + Lapack> {
-    /// The Q matrix from the QR Decomposition
-    pub q: Array2<T>,
-    /// The R matrix from the QR Decomposition
-    pub r: Array2<T>,
-    /// An index array. If ind[j] = k then the
-    /// jth column of Q * R is identical to the
-    /// kth column of the original matrix A.
-    pub ind: Array1<usize>,
-}
+use crate::prelude::QRContainer;
+use crate::Result;
 
 pub trait PivotedQR {
     type Q: Scalar + Lapack;
 
-    fn pivoted_qr(&self) -> Result<PivotedQRResult<Self::Q>, &'static str>;
+    fn pivoted_qr(&self) -> Result<QRContainer<Self::Q>>;
 }
 
 impl<A, S> PivotedQR for ArrayBase<S, Ix2>
 where
-    A: imp::PivotedQRImpl + Scalar + Lapack,
+    A: HasPivotedQR,
     S: Data<Elem = A>,
 {
     type Q = A;
 
-    fn pivoted_qr(&self) -> Result<PivotedQRResult<A>, &'static str> {
+    fn pivoted_qr(&self) -> Result<QRContainer<Self::Q>> {
         let m = self.nrows();
         let n = self.ncols();
 
-        let mut mat_fortran = Array2::<A>::zeros((m, n).f());
+        let mut mat_fortran = Array2::<Self::Q>::zeros((m, n).f());
         mat_fortran.assign(&self);
         A::pivoted_qr_impl(mat_fortran)
     }
 }
+
+pub trait HasPivotedQR: imp::PivotedQRImpl {
+}
+
+impl<A : imp::PivotedQRImpl> HasPivotedQR for A {}
+
 
 mod imp {
 
@@ -46,17 +43,18 @@ mod imp {
     use ndarray_linalg::layout::AllocatedArray;
     use ndarray_linalg::{IntoTriangular, Lapack, MatrixLayout, Scalar};
     use num::traits::{ToPrimitive, Zero};
+    use crate::Result;
 
     pub trait PivotedQRImpl
     where
         Self: Scalar + Lapack,
     {
         fn pivoted_qr_impl(mat: Array2<Self>)
-            -> Result<super::PivotedQRResult<Self>, &'static str>;
+            -> Result<super::QRContainer<Self>>;
         fn pivoted_qr_decomp(
             mat: &mut [Self],
             layout: MatrixLayout,
-        ) -> Result<(Array1<Self>, Array1<usize>), i32>;
+        ) -> std::result::Result<(Array1<Self>, Array1<usize>), i32>;
     }
 
     macro_rules! impl_qr_pivot {
@@ -71,7 +69,7 @@ mod imp {
             impl PivotedQRImpl for $scalar {
                 fn pivoted_qr_impl(
                     mut mat: Array2<Self>,
-                ) -> Result<super::PivotedQRResult<$scalar>, &'static str> {
+                ) -> Result<super::QRContainer<$scalar>> {
                     let m = mat.nrows();
                     let n = mat.ncols();
                     let k = m.min(n);
@@ -106,13 +104,13 @@ mod imp {
 
                     // Finally, return the QR decomposition.
 
-                    Ok(super::PivotedQRResult{q: q_mat, r:r_mat, ind: jpvt})
+                    Ok(super::QRContainer{q: q_mat, r:r_mat, ind: jpvt})
                 }
 
                 fn pivoted_qr_decomp(
                     mat: &mut [Self],
                     layout: MatrixLayout,
-                ) -> Result<(Array1<Self>, Array1<usize>), i32> {
+                ) -> std::result::Result<(Array1<Self>, Array1<usize>), i32> {
                     let m = layout.lda();
                     let n = layout.len();
                     let k = m.min(n);
@@ -194,7 +192,7 @@ mod tests {
 
         #[test]
         fn $name() {
-            use crate::Random;
+            use crate::prelude::Random;
             use ndarray_linalg::Norm;
             use ndarray_linalg::Scalar;
 
