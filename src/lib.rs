@@ -2,7 +2,7 @@ pub mod permutation;
 pub mod random;
 pub mod traits;
 pub mod pivoted_qr;
-//pub mod compute_svd;
+pub mod compute_svd;
 //pub mod svd_compression;
 pub mod prelude;
 pub mod svd_container;

@@ -1,7 +1,7 @@
 //! Traits and functions for permutation vectors.
 
 use crate::prelude::ScalarType;
-use ndarray::{Array1, Array2, ArrayView1, ArrayBase, Data, Ix1, Ix2, Axis};
+use ndarray::{Array1, Array2, ArrayBase, ArrayView1, Axis, Data, Ix1, Ix2};
 
 pub enum MatrixPermutationMode {
     COL,
@@ -46,6 +46,16 @@ pub trait ApplyPermutationToMatrix {
     ) -> Array2<Self::A>;
 }
 
+pub trait ApplyPermutationToVector {
+    type A;
+
+    fn apply_permutation(
+        &self,
+        index_array: ArrayView1<usize>,
+        mode: VectorPermutationMode,
+    ) -> Array1<Self::A>;
+}
+
 impl<A, S> ApplyPermutationToMatrix for ArrayBase<S, Ix2>
 where
     A: ScalarType,
@@ -65,7 +75,10 @@ where
 
         match mode {
             MatrixPermutationMode::COL => {
-                assert!(index_array.len() == n, "Length of index array and number of columns differ.");
+                assert!(
+                    index_array.len() == n,
+                    "Length of index array and number of columns differ."
+                );
                 for index in 0..n {
                     permuted
                         .index_axis_mut(Axis(1), index)
@@ -73,7 +86,10 @@ where
                 }
             }
             MatrixPermutationMode::ROW => {
-                assert!(index_array.len() == m, "Length of index array and number of rows differ.");
+                assert!(
+                    index_array.len() == m,
+                    "Length of index array and number of rows differ."
+                );
                 for index in 0..m {
                     permuted
                         .index_axis_mut(Axis(0), index)
@@ -81,7 +97,10 @@ where
                 }
             }
             MatrixPermutationMode::COLTRANS => {
-                assert!(index_array.len() == n, "Length of index array and number of columns differ.");
+                assert!(
+                    index_array.len() == n,
+                    "Length of index array and number of columns differ."
+                );
                 let inverse = invert_permutation_vector(&index_array);
                 for index in 0..n {
                     permuted
@@ -90,7 +109,10 @@ where
                 }
             }
             MatrixPermutationMode::ROWTRANS => {
-                assert!(index_array.len() == m, "Length of index array and number of rows differ.");
+                assert!(
+                    index_array.len() == m,
+                    "Length of index array and number of rows differ."
+                );
                 let inverse = invert_permutation_vector(&index_array);
                 for index in 0..m {
                     permuted
@@ -104,11 +126,50 @@ where
     }
 }
 
+impl<A, S> ApplyPermutationToVector for ArrayBase<S, Ix1>
+where
+    A: ScalarType,
+    S: Data<Elem = A>,
+{
+    type A = A;
+
+    fn apply_permutation(
+        &self,
+        index_array: ArrayView1<usize>,
+        mode: VectorPermutationMode,
+    ) -> Array1<Self::A> {
+        let n = self.len();
+
+        assert!(
+            index_array.len() == n,
+            "The input vector and the index array must have the same length"
+        );
+
+        let mut permutation = Array1::<Self::A>::zeros(n);
+
+        match mode {
+            VectorPermutationMode::TRANS => {
+                let inverse = invert_permutation_vector(&index_array);
+                for index in 0..n {
+                    permutation[index] = self[inverse[index]];
+                }
+            }
+            VectorPermutationMode::NOTRANS => {
+                for index in 0..n {
+                    permutation[index] = self[index_array[index]];
+                }
+            }
+        }
+
+        permutation
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
     use super::*;
-    use ndarray::{Array1, arr2};
+    use ndarray::{arr1, arr2, Array1};
 
     #[test]
     fn test_matrix_permutation() {
@@ -127,9 +188,37 @@ mod tests {
         perm[1] = 0;
         perm[2] = 1;
 
-        assert!(mat_right_col_shift == mat.apply_permutation(perm.view(), MatrixPermutationMode::COL));
-        assert!(mat_left_col_shift == mat.apply_permutation(perm.view(), MatrixPermutationMode::COLTRANS));
-        assert!(mat_right_row_shift == mat.apply_permutation(perm.view(), MatrixPermutationMode::ROW));
-        assert!(mat_left_row_shift == mat.apply_permutation(perm.view(), MatrixPermutationMode::ROWTRANS));
+        assert!(
+            mat_right_col_shift == mat.apply_permutation(perm.view(), MatrixPermutationMode::COL)
+        );
+        assert!(
+            mat_left_col_shift
+                == mat.apply_permutation(perm.view(), MatrixPermutationMode::COLTRANS)
+        );
+        assert!(
+            mat_right_row_shift == mat.apply_permutation(perm.view(), MatrixPermutationMode::ROW)
+        );
+        assert!(
+            mat_left_row_shift
+                == mat.apply_permutation(perm.view(), MatrixPermutationMode::ROWTRANS)
+        );
+    }
+
+    #[test]
+    fn test_vector_permutaiton() {
+        let vec = arr1(&[1.0, 2.0, 3.0]);
+
+        let mut perm = Array1::<usize>::zeros(3);
+        perm[0] = 2;
+        perm[1] = 0;
+        perm[2] = 1;
+
+        let vec_right_shift = arr1(&[3.0, 1.0, 2.0]);
+        let vec_left_shift = arr1(&[2.0, 3.0, 1.0]);
+
+        assert!(
+            vec_right_shift == vec.apply_permutation(perm.view(), VectorPermutationMode::NOTRANS)
+        );
+        assert!(vec_left_shift == vec.apply_permutation(perm.view(), VectorPermutationMode::TRANS));
     }
 }
