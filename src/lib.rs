@@ -1,6 +1,6 @@
 pub mod permutation;
 pub mod random;
-pub mod traits;
+pub mod helpers;
 pub mod pivoted_qr;
 pub mod compute_svd;
 //pub mod svd_compression;

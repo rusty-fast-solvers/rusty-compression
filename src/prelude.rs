@@ -5,7 +5,7 @@ pub use crate::qr_container::QRContainer;
 pub use crate::pivoted_qr::PivotedQR;
 pub use crate::pivoted_qr::HasPivotedQR;
 pub use crate::compute_svd::ComputeSVD;
-//pub use crate::svd_compression::CompressSVD;
+pub use crate::helpers::*;
 pub use crate::random::Random;
 
 
