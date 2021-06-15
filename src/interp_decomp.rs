@@ -1,100 +1,157 @@
 //! Implementation of the interpolative decomposition.
 
-use crate::pivoted_qr::{HasPivotedQR, PivotedQR, PivotedQRResult};
-use crate::CompressionType;
-use ndarray::{s, Array1, Array2, ArrayView2, Axis};
-use ndarray_linalg::{Lapack, Scalar};
-use num::traits::ToPrimitive;
+use crate::prelude::ApplyPermutationToMatrix;
+use crate::prelude::MatrixPermutationMode;
+use crate::prelude::QRContainer;
+use crate::prelude::ScalarType;
+use crate::Result;
+use ndarray::{s, Array1, Array2, ArrayBase, Axis, Data, Ix2};
+use ndarray_linalg::{FactorizeInto, Solve};
 
-pub struct ColumnIDResult<A: HasPivotedQR> {
+pub struct ColumnIDResult<A: ScalarType> {
     pub c: Array2<A>,
     pub z: Array2<A>,
     pub col_ind: Array1<usize>,
 }
 
-pub struct RowIDResult<A: HasPivotedQR> {
+impl<A: ScalarType> ColumnIDResult<A> {
+    pub fn nrows(&self) -> usize {
+        self.c.nrows()
+    }
+
+    pub fn ncols(&self) -> usize {
+        self.z.ncols()
+    }
+
+    pub fn rank(&self) -> usize {
+        self.c.ncols()
+    }
+
+    pub fn to_mat(&self) -> Array2<A> {
+        self.c.dot(&self.z)
+    }
+
+    //pub fn apply<S: Data<Elem = A>>(&self, other: &ArrayBase<S, Ix2>) -> ArrayBase<S, Ix2> {
+
+
+
+    //}
+}
+
+pub struct RowIDResult<A: ScalarType> {
     pub x: Array2<A>,
     pub row_ind: Array1<usize>,
 }
 
-pub struct TwoSidedIDResult<A: HasPivotedQR> {
+pub struct TwoSidedIDResult<A: ScalarType> {
     pub x: Array2<A>,
     pub row_ind: Array1<usize>,
     pub col_ind: Array1<usize>,
 }
 
-pub trait InterpolativeDecomp {
-    type A: HasPivotedQR;
+impl<A: ScalarType> QRContainer<A> {
+    pub fn column_id(&self) -> Result<ColumnIDResult<A>> {
+        let rank = self.rank();
+        let nrcols = self.r.ncols();
 
-    fn column_id(
-        compression_type: CompressionType,
-    ) -> Result<ColumnIDResult<Self::A>, &'static str>;
-    fn row_id(compression_type: CompressionType) -> Result<RowIDResult<Self::A>, &'static str>;
-    fn two_sided_id(
-        compression_type: CompressionType,
-    ) -> Result<TwoSidedIDResult<Self::A>, &'static str>;
-}
+        if rank == nrcols {
+            // Matrix not rank deficient.
+            Ok(ColumnIDResult::<A> {
+                c: self.q.dot(&self.r),
+                z: Array2::<A>::eye(rank)
+                    .apply_permutation(self.ind.view(), MatrixPermutationMode::COLTRANS),
+                col_ind: self.ind.clone(),
+            })
+        } else {
+            // Matrix is rank deficient.
 
-fn low_rank_from_pivoted_qr<A: HasPivotedQR>(
-    mat: ArrayView2<A>,
-    compression_type: CompressionType,
-) -> Result<PivotedQRResult<A>, &'static str> {
-    let m = mat.nrows();
-    let n = mat.ncols();
-    let k = m.min(n);
-    let mut qr_result = mat.pivoted_qr()?;
+            let mut z = Array2::<A>::zeros((rank, self.r.ncols()));
+            z.slice_mut(s![.., 0..rank]).diag_mut().fill(num::one());
+            let first_part = self.r.slice(s![.., 0..rank]).to_owned();
+            let c = self.q.dot(&first_part);
+            let factorized = first_part.factorize_into().unwrap();
 
-    let new_rank = match compression_type {
-        CompressionType::RANK(rank) => rank.min(k),
-        CompressionType::ADAPTIVE(tol) => {
-            let diag = qr_result.r.diag();
-            let pos = diag
-                .iter()
-                .position(|&item| (item.abs() / diag[0].abs()).to_f64().unwrap() < tol);
-            match pos {
-                Some(p) => p,
-                None => return Err("Compression to desired tolerance not possible."),
+            for (index, col) in self
+                .r
+                .slice(s![.., rank..nrcols])
+                .axis_iter(Axis(1))
+                .enumerate()
+            {
+                z.index_axis_mut(Axis(1), rank + index)
+                    .assign(&factorized.solve(&col.to_owned()).unwrap());
             }
+
+            Ok(ColumnIDResult::<A> {
+                c,
+                z: z.apply_permutation(self.ind.view(), MatrixPermutationMode::COLTRANS),
+                col_ind: self.ind.clone(),
+            })
         }
-    };
-
-    qr_result.q = qr_result.q.slice_move(s![.., 0..new_rank]);
-    qr_result.r = qr_result.r.slice_move(s![0..new_rank, ..]);
-    qr_result.ind = qr_result.ind.slice_move(s![0..new_rank]);
-
-    Ok(qr_result)
+    }
 }
 
-fn column_id_impl<A: HasPivotedQR>(
-    mat: ArrayView2<A>,
-    compression_type: CompressionType,
-) -> Result<ColumnIDResult<A>, &'static str> {
-    let qr_result = low_rank_from_pivoted_qr(mat, compression_type)?;
+#[cfg(test)]
+mod tests {
 
-    let m = mat.nrows();
-    let n = mat.ncols();
-    let rank = qr_result.r.nrows();
+    use crate::prelude::ApplyPermutationToMatrix;
+    use crate::prelude::CompressionType;
+    use crate::prelude::MatrixPermutationMode;
+    use crate::prelude::PivotedQR;
+    use crate::prelude::Random;
+    use crate::prelude::RelDiff;
+    use ndarray::Axis;
 
-    // Compute the permutation matrix.
+    macro_rules! id_compression_tests {
 
-    let pt = Array2::<A>::zeros((rank, rank));
-    let z = Array2::<A>::zeros((rank, n));
-    let c = Array2::<A>::zeros((m, rank));
+        ($($name:ident: $scalar:ty, $dim:expr, $tol:expr,)*) => {
 
-    for (col_index, &row_value) in qr_result.ind.iter().enumerate() {
-        pt[[col_index, row_value]] = num::traits::one();
+            $(
+
+        #[test]
+        fn $name() {
+            let m = $dim.0;
+            let n = $dim.1;
+
+            let sigma_max = 1.0;
+            let sigma_min = 1E-10;
+            let mut rng = rand::thread_rng();
+            let mat = <$scalar>::random_approximate_low_rank_matrix((m, n), sigma_max, sigma_min, &mut rng);
+
+            let qr = mat.pivoted_qr().unwrap().compress(CompressionType::ADAPTIVE($tol)).unwrap();
+            let rank = qr.rank();
+            let column_id = qr.column_id().unwrap();
+
+            // Compare with original matrix
+
+            assert!(column_id.to_mat().rel_diff(&mat) < 5.0 * $tol);
+
+            // Now compare the individual columns to make sure that the id basis columns
+            // agree with the corresponding matrix columns.
+
+            let mat_permuted = mat.apply_permutation(column_id.col_ind.view(), MatrixPermutationMode::COL);
+
+            for index in 0..rank {
+                assert!(mat_permuted.index_axis(Axis(1), index).rel_diff(&column_id.c.index_axis(Axis(1), index)) < $tol);
+
+            }
+
+
+        }
+
+
+            )*
+
+        }
     }
 
-    z.slice_mut(s![0..rank, 0..rank]).assign(&pt);
-    for (index, mut col) in c.axis_iter_mut(Axis(1)).enumerate() {
-        col.assign(&mat.index_axis(Axis(1), qr_result.ind[index]));
-    }
-
-    if n == k {
-        Ok(ColumnIDResult {
-            z,
-            col_ind: qr_result.ind,
-        })
-    } else {
+    id_compression_tests! {
+        test_id_compression_by_tol_f32_thin: f32, (100, 50), 1E-4,
+        test_id_compression_by_tol_c32_thin: ndarray_linalg::c32, (100, 50), 1E-4,
+        test_id_compression_by_tol_f64_thin: f64, (100, 50), 1E-4,
+        test_id_compression_by_tol_c64_thin: ndarray_linalg::c64, (100, 50), 1E-4,
+        test_id_compression_by_tol_f32_thick: f32, (50, 100), 1E-4,
+        test_id_compression_by_tol_c32_thick: ndarray_linalg::c32, (50, 100), 1E-4,
+        test_id_compression_by_tol_f64_thick: f64, (50, 100), 1E-4,
+        test_id_compression_by_tol_c64_thick: ndarray_linalg::c64, (50, 100), 1E-4,
     }
 }

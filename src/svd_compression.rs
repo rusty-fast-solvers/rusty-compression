@@ -113,7 +113,7 @@ mod tests {
         assert!(a.len_of(Axis(1)) == rank);
         assert!(bt.len_of(Axis(0)) == rank);
         assert!(bt.len_of(Axis(1)) == n);
-        assert!(a.dot(&bt).rel_diff(mat) < 1E-3);
+        assert!(a.dot(&bt).rel_diff(&mat) < 1E-3);
     }
 
     #[test]

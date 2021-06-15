@@ -152,7 +152,7 @@ mod tests {
             assert!(svd.u.len_of(Axis(1)) == rank);
             assert!(svd.vt.len_of(Axis(0)) == rank);
 
-            assert!(svd.to_mat().rel_diff(mat) < $tol);
+            assert!(svd.to_mat().rel_diff(&mat) < $tol);
         }
 
 
@@ -181,7 +181,7 @@ mod tests {
 
             // Compare with original matrix
 
-            assert!(svd.to_mat().rel_diff(mat) < $tol);
+            assert!(svd.to_mat().rel_diff(&mat) < $tol);
         }
 
 

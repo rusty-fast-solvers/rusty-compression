@@ -19,6 +19,18 @@ pub struct QRContainer<A: ScalarType> {
 }
 
 impl<A: ScalarType> QRContainer<A> {
+    pub fn nrows(&self) -> usize {
+        self.q.nrows()
+    }
+
+    pub fn ncols(&self) -> usize {
+        self.r.ncols()
+    }
+
+    pub fn rank(&self) -> usize {
+        self.q.ncols()
+    }
+
     /// If A P = QR, multiply Q * R * P^T to obtain the matrix A.
     pub fn to_mat(&self) -> Array2<A> {
         self.q.dot(
@@ -110,7 +122,7 @@ mod tests {
             assert!(qr.q.len_of(Axis(1)) == rank);
             assert!(qr.r.len_of(Axis(0)) == rank);
 
-            assert!(qr.to_mat().rel_diff(mat) < $tol);
+            assert!(qr.to_mat().rel_diff(&mat) < $tol);
         }
 
 
@@ -139,8 +151,8 @@ mod tests {
 
             // Compare with original matrix
 
-            assert!(qr.to_mat().rel_diff(mat) < $tol);
-            
+            assert!(qr.to_mat().rel_diff(&mat) < 5.0 * $tol);
+
             // Make sure new rank is smaller than original rank
 
             assert!(qr.q.ncols() < m.min(n));
