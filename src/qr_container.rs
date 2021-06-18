@@ -36,7 +36,7 @@ impl<A: ScalarType> QRContainer<A> {
         self.q.dot(
             &self
                 .r
-                .apply_permutation(self.ind.view(), MatrixPermutationMode::COLTRANS),
+                .apply_permutation(self.ind.view(), MatrixPermutationMode::COLINV),
         )
     }
 

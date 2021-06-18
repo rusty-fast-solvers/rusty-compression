@@ -2,9 +2,12 @@
 
 pub use crate::svd_container::SVDContainer;
 pub use crate::qr_container::QRContainer;
+pub use crate::lq_container::LQContainer;
 pub use crate::pivoted_qr::PivotedQR;
+pub use crate::pivoted_lq::PivotedLQ;
 pub use crate::pivoted_qr::HasPivotedQR;
 pub use crate::compute_svd::ComputeSVD;
+pub use crate::col_interp_decomp::*;
 pub use crate::helpers::*;
 pub use crate::permutation::*;
 pub use crate::random::Random;

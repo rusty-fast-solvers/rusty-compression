@@ -6,13 +6,13 @@ use ndarray::{Array1, Array2, ArrayBase, ArrayView1, Axis, Data, Ix1, Ix2};
 pub enum MatrixPermutationMode {
     COL,
     ROW,
-    COLTRANS,
-    ROWTRANS,
+    COLINV,
+    ROWINV,
 }
 
 pub enum VectorPermutationMode {
-    TRANS,
-    NOTRANS,
+    INV,
+    NOINV,
 }
 
 pub fn invert_permutation_vector<S: Data<Elem = usize>>(perm: &ArrayBase<S, Ix1>) -> Array1<usize> {
@@ -37,8 +37,8 @@ pub trait ApplyPermutationToMatrix {
     ///                   permutation the ith row/column of the permuted matrix
     ///                   will contain the jth row/column of the original matrix.
     /// * `mode` : The permutation mode. If the permutation mode is `ROW` or `COL` then
-    ///            permute the rows/columns of the matrix. If the permutation mode is `ROWTRANS` or
-    ///            `COLTRANS` then apply the inverse permutation to the rows/columns.
+    ///            permute the rows/columns of the matrix. If the permutation mode is `ROWINV` or
+    ///            `COLINV` then apply the inverse permutation to the rows/columns.
     fn apply_permutation(
         &self,
         index_array: ArrayView1<usize>,
@@ -96,7 +96,7 @@ where
                         .assign(&self.index_axis(Axis(0), index_array[index]));
                 }
             }
-            MatrixPermutationMode::COLTRANS => {
+            MatrixPermutationMode::COLINV => {
                 assert!(
                     index_array.len() == n,
                     "Length of index array and number of columns differ."
@@ -108,7 +108,7 @@ where
                         .assign(&self.index_axis(Axis(1), inverse[index]));
                 }
             }
-            MatrixPermutationMode::ROWTRANS => {
+            MatrixPermutationMode::ROWINV => {
                 assert!(
                     index_array.len() == m,
                     "Length of index array and number of rows differ."
@@ -148,13 +148,13 @@ where
         let mut permutation = Array1::<Self::A>::zeros(n);
 
         match mode {
-            VectorPermutationMode::TRANS => {
+            VectorPermutationMode::INV => {
                 let inverse = invert_permutation_vector(&index_array);
                 for index in 0..n {
                     permutation[index] = self[inverse[index]];
                 }
             }
-            VectorPermutationMode::NOTRANS => {
+            VectorPermutationMode::NOINV => {
                 for index in 0..n {
                     permutation[index] = self[index_array[index]];
                 }
@@ -193,14 +193,14 @@ mod tests {
         );
         assert!(
             mat_left_col_shift
-                == mat.apply_permutation(perm.view(), MatrixPermutationMode::COLTRANS)
+                == mat.apply_permutation(perm.view(), MatrixPermutationMode::COLINV)
         );
         assert!(
             mat_right_row_shift == mat.apply_permutation(perm.view(), MatrixPermutationMode::ROW)
         );
         assert!(
             mat_left_row_shift
-                == mat.apply_permutation(perm.view(), MatrixPermutationMode::ROWTRANS)
+                == mat.apply_permutation(perm.view(), MatrixPermutationMode::ROWINV)
         );
     }
 
@@ -217,8 +217,8 @@ mod tests {
         let vec_left_shift = arr1(&[2.0, 3.0, 1.0]);
 
         assert!(
-            vec_right_shift == vec.apply_permutation(perm.view(), VectorPermutationMode::NOTRANS)
+            vec_right_shift == vec.apply_permutation(perm.view(), VectorPermutationMode::NOINV)
         );
-        assert!(vec_left_shift == vec.apply_permutation(perm.view(), VectorPermutationMode::TRANS));
+        assert!(vec_left_shift == vec.apply_permutation(perm.view(), VectorPermutationMode::INV));
     }
 }

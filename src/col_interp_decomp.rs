@@ -5,13 +5,18 @@ use crate::prelude::MatrixPermutationMode;
 use crate::prelude::QRContainer;
 use crate::prelude::ScalarType;
 use crate::Result;
-use ndarray::{s, Array1, Array2, ArrayBase, Axis, Data, Ix2};
+use ndarray::{s, Array1, Array2, ArrayBase, Axis, Data, Ix2, Ix1, OwnedRepr};
 use ndarray_linalg::{FactorizeInto, Solve};
 
 pub struct ColumnIDResult<A: ScalarType> {
     pub c: Array2<A>,
     pub z: Array2<A>,
     pub col_ind: Array1<usize>,
+}
+
+pub struct RowIDResult<A: ScalarType> {
+    pub x: Array2<A>,
+    pub row_ind: Array1<usize>,
 }
 
 impl<A: ScalarType> ColumnIDResult<A> {
@@ -31,16 +36,21 @@ impl<A: ScalarType> ColumnIDResult<A> {
         self.c.dot(&self.z)
     }
 
-    //pub fn apply<S: Data<Elem = A>>(&self, other: &ArrayBase<S, Ix2>) -> ArrayBase<S, Ix2> {
+    pub fn apply_matrix<S: Data<Elem = A>>(
+        &self,
+        other: &ArrayBase<S, Ix2>,
+    ) -> ArrayBase<OwnedRepr<A>, Ix2> {
+        self.c.dot(&self.z.dot(other))
+    }
 
-
+    pub fn apply_vector<S: Data<Elem = A>>(
+        &self,
+        other: &ArrayBase<S, Ix1>,
+        ) -> ArrayBase<OwnedRepr<A>, Ix1> {
+        self.c.dot(&self.z.dot(other))
+    }
 
     //}
-}
-
-pub struct RowIDResult<A: ScalarType> {
-    pub x: Array2<A>,
-    pub row_ind: Array1<usize>,
 }
 
 pub struct TwoSidedIDResult<A: ScalarType> {
@@ -59,7 +69,7 @@ impl<A: ScalarType> QRContainer<A> {
             Ok(ColumnIDResult::<A> {
                 c: self.q.dot(&self.r),
                 z: Array2::<A>::eye(rank)
-                    .apply_permutation(self.ind.view(), MatrixPermutationMode::COLTRANS),
+                    .apply_permutation(self.ind.view(), MatrixPermutationMode::COLINV),
                 col_ind: self.ind.clone(),
             })
         } else {
@@ -83,7 +93,7 @@ impl<A: ScalarType> QRContainer<A> {
 
             Ok(ColumnIDResult::<A> {
                 c,
-                z: z.apply_permutation(self.ind.view(), MatrixPermutationMode::COLTRANS),
+                z: z.apply_permutation(self.ind.view(), MatrixPermutationMode::COLINV),
                 col_ind: self.ind.clone(),
             })
         }
