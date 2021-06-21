@@ -62,7 +62,7 @@ pub struct TwoSidedIDResult<A: ScalarType> {
 impl<A: ScalarType> QRContainer<A> {
     pub fn column_id(&self) -> Result<ColumnIDResult<A>> {
         let rank = self.rank();
-        let nrcols = self.r.ncols();
+        let nrcols = self.ncols();
 
         if rank == nrcols {
             // Matrix not rank deficient.

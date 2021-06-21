@@ -6,7 +6,7 @@ use crate::prelude::LQContainer;
 use crate::prelude::ScalarType;
 use crate::Result;
 use ndarray::{s, Array1, Array2, ArrayBase, Axis, Data, Ix2, Ix1, OwnedRepr};
-use ndarray_linalg::{FactorizeInto, Solve};
+use ndarray_linalg::{SolveTriangular, UPLO, Diag};
 
 pub struct RowIDResult<A: ScalarType> {
     pub x: Array2<A>,
@@ -51,39 +51,39 @@ impl<A: ScalarType> RowIDResult<A> {
 impl<A: ScalarType> LQContainer<A> {
     pub fn row_id(&self) -> Result<RowIDResult<A>> {
         let rank = self.rank();
-        let nrcols = self.r.ncols();
+        let nrows = self.nrows();
 
-        if rank == nrcols {
+        if rank == nrows {
             // Matrix not rank deficient.
             Ok(RowIDResult::<A> {
-                x: self.q.dot(&self.r),
-                z: Array2::<A>::eye(rank)
-                    .apply_permutation(self.ind.view(), MatrixPermutationMode::COLINV),
-                col_ind: self.ind.clone(),
+                x: Array2::<A>::eye(rank)
+                    .apply_permutation(self.ind.view(), MatrixPermutationMode::ROWINV),
+                r: self.l.dot(&self.q),
+                row_ind: self.ind.clone(),
             })
         } else {
             // Matrix is rank deficient.
 
-            let mut z = Array2::<A>::zeros((rank, self.r.ncols()));
-            z.slice_mut(s![.., 0..rank]).diag_mut().fill(num::one());
-            let first_part = self.r.slice(s![.., 0..rank]).to_owned();
-            let c = self.q.dot(&first_part);
-            let factorized = first_part.factorize_into().unwrap();
+            let mut x = Array2::<A>::zeros((self.nrows(), rank));
+            x.slice_mut(s![0..rank, ..]).diag_mut().fill(num::one());
+            let first_part = self.l.slice(s![0..rank, ..]).to_owned();
+            let r = first_part.dot(&self.q);
+            let first_part_transposed = first_part.t().to_owned();
 
-            for (index, col) in self
-                .r
-                .slice(s![.., rank..nrcols])
-                .axis_iter(Axis(1))
+            for (index, row) in self
+                .l
+                .slice(s![rank..nrows, ..])
+                .axis_iter(Axis(0))
                 .enumerate()
             {
-                z.index_axis_mut(Axis(1), rank + index)
-                    .assign(&factorized.solve(&col.to_owned()).unwrap());
+                x.index_axis_mut(Axis(0), rank + index)
+                    .assign(&first_part_transposed.solve_triangular(UPLO::Upper, Diag::NonUnit, &row.to_owned()).unwrap());
             }
 
-            Ok(ColumnIDResult::<A> {
-                c,
-                z: z.apply_permutation(self.ind.view(), MatrixPermutationMode::COLINV),
-                col_ind: self.ind.clone(),
+            Ok(RowIDResult::<A> {
+                x: x.apply_permutation(self.ind.view(), MatrixPermutationMode::ROWINV),
+                r,
+                row_ind: self.ind.clone(),
             })
         }
     }
@@ -95,7 +95,7 @@ mod tests {
     use crate::prelude::ApplyPermutationToMatrix;
     use crate::prelude::CompressionType;
     use crate::prelude::MatrixPermutationMode;
-    use crate::prelude::PivotedQR;
+    use crate::prelude::PivotedLQ;
     use crate::prelude::Random;
     use crate::prelude::RelDiff;
     use ndarray::Axis;
@@ -116,21 +116,21 @@ mod tests {
             let mut rng = rand::thread_rng();
             let mat = <$scalar>::random_approximate_low_rank_matrix((m, n), sigma_max, sigma_min, &mut rng);
 
-            let qr = mat.pivoted_qr().unwrap().compress(CompressionType::ADAPTIVE($tol)).unwrap();
-            let rank = qr.rank();
-            let column_id = qr.column_id().unwrap();
+            let lq = mat.pivoted_lq().unwrap().compress(CompressionType::ADAPTIVE($tol)).unwrap();
+            let rank = lq.rank();
+            let row_id = lq.row_id().unwrap();
 
             // Compare with original matrix
 
-            assert!(column_id.to_mat().rel_diff(&mat) < 5.0 * $tol);
+            assert!(row_id.to_mat().rel_diff(&mat) < 5.0 * $tol);
 
             // Now compare the individual columns to make sure that the id basis columns
             // agree with the corresponding matrix columns.
 
-            let mat_permuted = mat.apply_permutation(column_id.col_ind.view(), MatrixPermutationMode::COL);
+            let mat_permuted = mat.apply_permutation(row_id.row_ind.view(), MatrixPermutationMode::ROW);
 
             for index in 0..rank {
-                assert!(mat_permuted.index_axis(Axis(1), index).rel_diff(&column_id.c.index_axis(Axis(1), index)) < $tol);
+                assert!(mat_permuted.index_axis(Axis(0), index).rel_diff(&row_id.r.index_axis(Axis(0), index)) < $tol);
 
             }
 

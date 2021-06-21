@@ -6,6 +6,7 @@ pub mod pivoted_lq;
 pub mod random;
 //pub mod svd_compression;
 pub mod col_interp_decomp;
+pub mod row_interp_decomp;
 pub mod prelude;
 pub mod qr_container;
 pub mod lq_container;
