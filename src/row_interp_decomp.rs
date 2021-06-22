@@ -96,7 +96,7 @@ mod tests {
     use crate::prelude::CompressionType;
     use crate::prelude::MatrixPermutationMode;
     use crate::prelude::PivotedLQ;
-    use crate::prelude::Random;
+    use crate::prelude::RandomMatrix;
     use crate::prelude::RelDiff;
     use ndarray::Axis;
 

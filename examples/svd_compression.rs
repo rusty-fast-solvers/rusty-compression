@@ -1,4 +1,4 @@
-use rusty_compression::prelude::Random;
+use rusty_compression::prelude::RandomMatrix;
 use ndarray::Axis;
 
 pub fn main() {

@@ -94,7 +94,7 @@ mod tests {
 
     use super::*;
     use crate::prelude::PivotedQR;
-    use crate::prelude::Random;
+    use crate::prelude::RandomMatrix;
     use crate::prelude::RelDiff;
     use ndarray::Axis;
 

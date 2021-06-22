@@ -1,95 +1,65 @@
 //! Implementation of the interpolative decomposition.
 
-use crate::prelude::ApplyPermutationToMatrix;
-use crate::prelude::MatrixPermutationMode;
+use crate::pivoted_lq::PivotedLQ;
 use crate::prelude::QRContainer;
 use crate::prelude::ScalarType;
 use crate::Result;
-use ndarray::{s, Array1, Array2, ArrayBase, Axis, Data, Ix2, Ix1, OwnedRepr};
-use ndarray_linalg::{SolveTriangular, UPLO, Diag};
+use ndarray::{Array1, Array2, ArrayBase, Data, Ix1, Ix2, OwnedRepr};
 
-pub struct ColumnIDResult<A: ScalarType> {
+pub struct TwoSidedIDResult<A: ScalarType> {
+    pub x: Array2<A>,
+    pub r: Array2<A>,
     pub c: Array2<A>,
-    pub z: Array2<A>,
+    pub row_ind: Array1<usize>,
     pub col_ind: Array1<usize>,
 }
 
-pub struct RowIDResult<A: ScalarType> {
-    pub x: Array2<A>,
-    pub row_ind: Array1<usize>,
-}
-
-impl<A: ScalarType> ColumnIDResult<A> {
+impl<A: ScalarType> TwoSidedIDResult<A> {
     pub fn nrows(&self) -> usize {
         self.c.nrows()
     }
 
     pub fn ncols(&self) -> usize {
-        self.z.ncols()
+        self.r.ncols()
     }
 
     pub fn rank(&self) -> usize {
-        self.c.ncols()
+        self.x.nrows()
     }
 
     pub fn to_mat(&self) -> Array2<A> {
-        self.c.dot(&self.z)
+        self.c.dot(&self.x.dot(&self.r))
     }
 
     pub fn apply_matrix<S: Data<Elem = A>>(
         &self,
         other: &ArrayBase<S, Ix2>,
     ) -> ArrayBase<OwnedRepr<A>, Ix2> {
-        self.c.dot(&self.z.dot(other))
+        self.c.dot(&self.x.dot(&self.r.dot(other)))
     }
 
     pub fn apply_vector<S: Data<Elem = A>>(
         &self,
         other: &ArrayBase<S, Ix1>,
-        ) -> ArrayBase<OwnedRepr<A>, Ix1> {
-        self.c.dot(&self.z.dot(other))
+    ) -> ArrayBase<OwnedRepr<A>, Ix1> {
+        self.c.dot(&self.x.dot(&self.r.dot(other)))
     }
 
     //}
 }
 
 impl<A: ScalarType> QRContainer<A> {
-    pub fn column_id(&self) -> Result<ColumnIDResult<A>> {
-        let rank = self.rank();
-        let nrcols = self.ncols();
+    pub fn two_sided_id(&self) -> Result<TwoSidedIDResult<A>> {
+        let col_id = self.column_id()?;
+        let row_id = col_id.c.pivoted_lq()?.row_id()?;
 
-        if rank == nrcols {
-            // Matrix not rank deficient.
-            Ok(ColumnIDResult::<A> {
-                c: self.q.dot(&self.r),
-                z: Array2::<A>::eye(rank)
-                    .apply_permutation(self.ind.view(), MatrixPermutationMode::COLINV),
-                col_ind: self.ind.clone(),
-            })
-        } else {
-            // Matrix is rank deficient.
-
-            let mut z = Array2::<A>::zeros((rank, self.r.ncols()));
-            z.slice_mut(s![.., 0..rank]).diag_mut().fill(num::one());
-            let first_part = self.r.slice(s![.., 0..rank]).to_owned();
-            let c = self.q.dot(&first_part);
-
-            for (index, col) in self
-                .r
-                .slice(s![.., rank..nrcols])
-                .axis_iter(Axis(1))
-                .enumerate()
-            {
-                z.index_axis_mut(Axis(1), rank + index)
-                    .assign(&first_part.solve_triangular(UPLO::Upper, Diag::NonUnit, &col.to_owned()).unwrap());
-            }
-
-            Ok(ColumnIDResult::<A> {
-                c,
-                z: z.apply_permutation(self.ind.view(), MatrixPermutationMode::COLINV),
-                col_ind: self.ind.clone(),
-            })
-        }
+        Ok(TwoSidedIDResult {
+            c: row_id.x,
+            x: row_id.r,
+            r: col_id.z,
+            row_ind: row_id.row_ind,
+            col_ind: col_id.col_ind,
+        })
     }
 }
 
@@ -102,7 +72,7 @@ mod tests {
     use crate::prelude::PivotedQR;
     use crate::prelude::RandomMatrix;
     use crate::prelude::RelDiff;
-    use ndarray::Axis;
+    use ndarray_linalg::Scalar;
 
     macro_rules! id_compression_tests {
 
@@ -122,23 +92,37 @@ mod tests {
 
             let qr = mat.pivoted_qr().unwrap().compress(CompressionType::ADAPTIVE($tol)).unwrap();
             let rank = qr.rank();
-            let column_id = qr.column_id().unwrap();
+            let two_sided_id = qr.two_sided_id().unwrap();
 
             // Compare with original matrix
 
-            assert!(column_id.to_mat().rel_diff(&mat) < 5.0 * $tol);
+            assert!(two_sided_id.to_mat().rel_diff(&mat) < 5.0 * $tol);
 
             // Now compare the individual columns to make sure that the id basis columns
             // agree with the corresponding matrix columns.
 
-            let mat_permuted = mat.apply_permutation(column_id.col_ind.view(), MatrixPermutationMode::COL);
+            let mat_permuted = mat.apply_permutation(two_sided_id.row_ind.view(), MatrixPermutationMode::ROW).
+                apply_permutation(two_sided_id.col_ind.view(), MatrixPermutationMode::COL);
 
-            for index in 0..rank {
-                assert!(mat_permuted.index_axis(Axis(1), index).rel_diff(&column_id.c.index_axis(Axis(1), index)) < $tol);
+            // Assert that the x matrix in the two sided id is squared with correct dimension.
 
+            assert!(two_sided_id.x.nrows() == two_sided_id.x.ncols());
+            assert!(two_sided_id.x.nrows() == rank);
+
+            // Now compare with the original matrix.
+
+            for row_index in 0..rank {
+                for col_index in 0..rank {
+                    let tmp = (two_sided_id.x[[row_index, col_index]] - mat_permuted[[row_index, col_index]]).abs() / mat_permuted[[row_index, col_index]].abs();
+                    println!("Rel Error {}", tmp);
+                    //if tmp >= 5.0 * $tol {
+                        //println!(" Rel Error {}", tmp);
+                    //}
+ 
+                    assert!((two_sided_id.x[[row_index, col_index]] - mat_permuted[[row_index, col_index]]).abs()
+                            < 10.0 * $tol * mat_permuted[[row_index, col_index]].abs())
+                }
             }
-
-
         }
 
 

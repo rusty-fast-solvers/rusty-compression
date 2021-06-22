@@ -1,4 +1,4 @@
-//! Routines needed by the other modules.
+//! Generation of random matrices for various types
 
 use ndarray::Array2;
 use ndarray_linalg::{Lapack, SVDDCInto, Scalar, UVTFlag};
@@ -8,7 +8,7 @@ use num::Float;
 use rand::Rng;
 use rand_distr::{Distribution, Normal};
 
-pub trait Random {
+pub trait RandomMatrix {
     type T: Scalar + Lapack;
 
     /// Generate a random Gaussian matrix.
@@ -92,7 +92,7 @@ pub trait Random {
     }
 }
 
-impl Random for f64 {
+impl RandomMatrix for f64 {
     type T = f64;
 
     fn random_gaussian<R: Rng>(dimension: (usize, usize), rng: &mut R) -> Array2<f64> {
@@ -100,7 +100,7 @@ impl Random for f64 {
     }
 }
 
-impl Random for f32 {
+impl RandomMatrix for f32 {
     type T = f32;
 
     fn random_gaussian<R: Rng>(dimension: (usize, usize), rng: &mut R) -> Array2<f32> {
@@ -108,7 +108,7 @@ impl Random for f32 {
     }
 }
 
-impl Random for Complex<f64> {
+impl RandomMatrix for Complex<f64> {
     type T = Complex<f64>;
 
     fn random_gaussian<R: Rng>(dimension: (usize, usize), rng: &mut R) -> Array2<Complex<f64>> {
@@ -116,7 +116,7 @@ impl Random for Complex<f64> {
     }
 }
 
-impl Random for Complex<f32> {
+impl RandomMatrix for Complex<f32> {
     type T = Complex<f32>;
 
     fn random_gaussian<R: Rng>(dimension: (usize, usize), rng: &mut R) -> Array2<Complex<f32>> {

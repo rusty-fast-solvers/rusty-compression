@@ -47,7 +47,7 @@ mod tests {
 
         #[test]
         fn $name() {
-            use crate::prelude::Random;
+            use crate::prelude::RandomMatrix;
             use ndarray_linalg::Norm;
             use ndarray_linalg::Scalar;
 

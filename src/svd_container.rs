@@ -100,7 +100,7 @@ mod tests {
     use crate::compute_svd::ComputeSVD;
     use crate::prelude::CompressionType;
     use crate::prelude::RelDiff;
-    use crate::random::Random;
+    use crate::random_matrix::RandomMatrix;
     use ndarray_linalg::OperationNorm;
     use ndarray::Axis;
 
