@@ -19,7 +19,8 @@ pub enum CompressionType {
     RANK(usize),
 }
 
-pub trait ScalarType: HasPivotedQR {}
+pub trait ScalarType: HasPivotedQR + RandomMatrix {}
 
-impl<A: HasPivotedQR> ScalarType for A {}
+impl<A: HasPivotedQR + RandomMatrix> ScalarType for A {}
+
 

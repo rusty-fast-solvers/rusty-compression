@@ -4,11 +4,10 @@
 
 use ndarray::{Array2, ArrayBase, Data, Ix2, ShapeBuilder};
 use crate::prelude::QRContainer;
-use crate::prelude::ScalarType;
 use crate::Result;
 
 pub trait PivotedQR {
-    type Q: ScalarType;
+    type Q: HasPivotedQR;
 
     fn pivoted_qr(&self) -> Result<QRContainer<Self::Q>>;
 }

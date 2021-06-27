@@ -1,7 +1,6 @@
 //! Define an SVD container and conversion tools.
 
 use crate::prelude::CompressionType;
-use crate::prelude::HasPivotedQR;
 use crate::prelude::PivotedQR;
 use crate::prelude::QRContainer;
 use crate::prelude::ScalarType;
@@ -18,7 +17,7 @@ pub struct SVDContainer<A: ScalarType> {
     pub vt: Array2<A>,
 }
 
-impl<A: HasPivotedQR> SVDContainer<A> {
+impl<A: ScalarType> SVDContainer<A> {
     pub fn to_qr(self) -> Result<QRContainer<A>> {
         let (u, s, mut vt) = (self.u, self.s, self.vt);
 

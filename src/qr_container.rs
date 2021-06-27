@@ -3,11 +3,12 @@
 use crate::permutation::*;
 use crate::prelude::CompressionType;
 use crate::prelude::ScalarType;
+use crate::prelude::HasPivotedQR;
 use crate::Result;
 use ndarray::{s, Array1, Array2};
 use num::ToPrimitive;
 
-pub struct QRContainer<A: ScalarType> {
+pub struct QRContainer<A: HasPivotedQR> {
     /// The Q matrix from the QR Decomposition
     pub q: Array2<A>,
     /// The R matrix from the QR Decomposition
