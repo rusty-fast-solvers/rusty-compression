@@ -5,8 +5,8 @@ use crate::prelude::PivotedQR;
 use crate::prelude::RandomMatrix;
 use crate::prelude::ScalarType;
 use crate::Result;
-use ndarray::{Array1, Array2, ArrayBase, ArrayView1, ArrayView2, Axis, Data, Ix2};
-use ndarray_linalg::Scalar;
+use ndarray::{concatenate, Array1, Array2, ArrayBase, ArrayView1, ArrayView2, Axis, Data, Ix2};
+use ndarray_linalg::{Lapack, Norm, Scalar, QR};
 use rand::Rng;
 
 pub trait MatVec {
@@ -117,7 +117,12 @@ where
 // * `p`: Oversampling parameter. `p` should be chosen small. A typical size
 //      is p=5.
 // * `rng`: The random number generator.
-pub fn sample_range_by_rank<Op: MatMat, R: Rng>(op: &Op, k: usize, p: usize, rng: &mut R) -> Result<Array2<Op::A>> {
+pub fn sample_range_by_rank<Op: MatMat, R: Rng>(
+    op: &Op,
+    k: usize,
+    p: usize,
+    rng: &mut R,
+) -> Result<Array2<Op::A>> {
     let m = op.ncols();
 
     let omega = Op::A::random_gaussian((m, k + p), rng);
@@ -143,9 +148,8 @@ pub fn sample_range_by_rank_power_iteration<Op: ConjRowMatMat, R: Rng>(
     k: usize,
     p: usize,
     it_count: usize,
-    rng: &mut R
+    rng: &mut R,
 ) -> Result<Array2<Op::A>> {
-    use ndarray_linalg::QR;
 
     let m = op.ncols();
 
@@ -154,8 +158,8 @@ pub fn sample_range_by_rank_power_iteration<Op: ConjRowMatMat, R: Rng>(
     let mut res = op_omega.clone();
 
     for index in 0..it_count {
-        let (q, r) = op_omega.qr().unwrap();
-        let (w, r) = op
+        let (q, _) = op_omega.qr().unwrap();
+        let (w, _) = op
             .conj_row_matmat(q.view())
             .t()
             .map(|item| item.conj())
@@ -175,6 +179,16 @@ pub fn sample_range_by_rank_power_iteration<Op: ConjRowMatMat, R: Rng>(
     Ok(qr.q)
 }
 
+// For a given matrix return the maximum column norm.
+fn max_col_norm<A: Scalar + Lapack, S: Data<Elem = A>>(mat: &ArrayBase<S, Ix2>) -> A::Real {
+    let mut max_val = num::zero::<A::Real>();
+
+    for col in mat.axis_iter(Axis(1)) {
+        max_val = num::Float::max(max_val, col.norm_l2());
+    }
+    max_val
+}
+
 // Adaptively randomly sample the range of an operator up to a given tolerance.
 // # Arguments
 // * `op`: The operator for which to sample the range.
@@ -184,17 +198,40 @@ pub fn sample_range_adaptive<Op: ConjRowMatMat, R: Rng>(
     op: &Op,
     tol: f64,
     sample_size: usize,
-    rng: &mut R
+    rng: &mut R,
 ) -> Result<Array2<Op::A>> {
+    let sqrt_two_div_pi = num::cast::<f64, <Op::A as Scalar>::Real>(
+        <f64 as num::traits::FloatConst>::FRAC_2_PI().sqrt(),
+    )
+    .unwrap();
 
     let m = op.ncols();
+    let tol = num::cast::<f64, <Op::A as Scalar>::Real>(tol).unwrap();
     let omega = Op::A::random_gaussian((m, sample_size), rng);
-    let op_omega = op.matmat(omega.view());
+    let mut op_omega = op.matmat(omega.view());
+    let mut max_norm = max_col_norm(&op_omega) / sqrt_two_div_pi;
+    let mut q = Array2::<Op::A>::zeros((op.nrows(), 0));
+    let mut b = Array2::<Op::A>::zeros((0, op.ncols()));
 
+    while max_norm > tol {
+        // Orthogonalize against existing basis
+        if q.ncols() > 0 {
+            op_omega -= &q.dot(&q.t().map(|item| item.conj()).dot(&op_omega));
+        }
+        // Now do the QR of the vectors
+        let (qtemp, _) = op_omega.qr().unwrap();
+        // Extend the b matrix
+        b = concatenate![Axis(0), b, op.conj_row_matmat(qtemp.view())];
+        // Extend the Q matrix
+        q = concatenate![Axis(1), q, qtemp];
 
+        // Now compute new vectors
+        let omega = Op::A::random_gaussian((m, sample_size), rng);
+        op_omega = op.matmat(omega.view()) - q.dot(&b.dot(&omega));
 
+        // Update the error tolerance
+        max_norm = max_col_norm(&op_omega) / sqrt_two_div_pi;
+    }
+
+    Ok(q)
 }
-
-
-
-fn check_norm
