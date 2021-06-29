@@ -1,6 +1,6 @@
 [package]
 name = "rusty-compression"
-version = "0.1.0"
+version = "0.0.1"
 authors = ["Timo Betcke <timo.betcke@gmail.com>", "Srinath Kailasa"]
 edition = "2018"
 description = "Low rank compression algorithms in Rust."
