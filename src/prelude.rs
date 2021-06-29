@@ -10,6 +10,7 @@ pub use crate::compute_svd::ComputeSVD;
 pub use crate::helpers::*;
 pub use crate::permutation::*;
 pub use crate::random_matrix::RandomMatrix;
+pub use crate::random_sampling::*;
 
 
 pub enum CompressionType {
