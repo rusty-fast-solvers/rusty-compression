@@ -2,8 +2,8 @@
 
 use crate::permutation::*;
 use crate::prelude::CompressionType;
-use crate::prelude::ScalarType;
 use crate::prelude::HasPivotedQR;
+use crate::prelude::ScalarType;
 use crate::Result;
 use ndarray::{s, Array1, Array2};
 use num::ToPrimitive;

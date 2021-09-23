@@ -33,10 +33,9 @@ impl<A: ScalarType> LQContainer<A> {
 
     /// If P A  = LQ, multiply P^T * L * Q to obtain the matrix A.
     pub fn to_mat(&self) -> Array2<A> {
-        self.l.apply_permutation(self.ind.view(), MatrixPermutationMode::ROWINV).dot(
-            &self
-                .q
-        )
+        self.l
+            .apply_permutation(self.ind.view(), MatrixPermutationMode::ROWINV)
+            .dot(&self.q)
     }
 
     pub fn compress(self, compression_type: CompressionType) -> Result<LQContainer<A>> {
@@ -91,97 +90,95 @@ fn compress_lq_tolerance<A: ScalarType>(
 //#[cfg(test)]
 //mod tests {
 
-    //use super::*;
-    //use crate::prelude::PivotedQR;
-    //use crate::prelude::Random;
-    //use crate::prelude::RelDiff;
-    //use ndarray::Axis;
+//use super::*;
+//use crate::prelude::PivotedQR;
+//use crate::prelude::Random;
+//use crate::prelude::RelDiff;
+//use ndarray::Axis;
 
-    //macro_rules! qr_compression_by_rank_tests {
+//macro_rules! qr_compression_by_rank_tests {
 
-        //($($name:ident: $scalar:ty, $dim:expr, $tol:expr,)*) => {
+//($($name:ident: $scalar:ty, $dim:expr, $tol:expr,)*) => {
 
-            //$(
+//$(
 
-        //#[test]
-        //fn $name() {
-            //let m = $dim.0;
-            //let n = $dim.1;
-            //let rank: usize = 30;
+//#[test]
+//fn $name() {
+//let m = $dim.0;
+//let n = $dim.1;
+//let rank: usize = 30;
 
-            //let sigma_max = 1.0;
-            //let sigma_min = 1E-10;
-            //let mut rng = rand::thread_rng();
-            //let mat = <$scalar>::random_approximate_low_rank_matrix((m, n), sigma_max, sigma_min, &mut rng);
+//let sigma_max = 1.0;
+//let sigma_min = 1E-10;
+//let mut rng = rand::thread_rng();
+//let mat = <$scalar>::random_approximate_low_rank_matrix((m, n), sigma_max, sigma_min, &mut rng);
 
-            //let qr = mat.pivoted_qr().unwrap().compress(CompressionType::RANK(rank)).unwrap();
+//let qr = mat.pivoted_qr().unwrap().compress(CompressionType::RANK(rank)).unwrap();
 
-            //// Compare with original matrix
+//// Compare with original matrix
 
-            //assert!(qr.q.len_of(Axis(1)) == rank);
-            //assert!(qr.r.len_of(Axis(0)) == rank);
+//assert!(qr.q.len_of(Axis(1)) == rank);
+//assert!(qr.r.len_of(Axis(0)) == rank);
 
-            //assert!(qr.to_mat().rel_diff(&mat) < $tol);
-        //}
+//assert!(qr.to_mat().rel_diff(&mat) < $tol);
+//}
 
+//)*
 
-            //)*
+//}
+//}
 
-        //}
-    //}
+//macro_rules! qr_compression_by_tol_tests {
 
-    //macro_rules! qr_compression_by_tol_tests {
+//($($name:ident: $scalar:ty, $dim:expr, $tol:expr,)*) => {
 
-        //($($name:ident: $scalar:ty, $dim:expr, $tol:expr,)*) => {
+//$(
 
-            //$(
+//#[test]
+//fn $name() {
+//let m = $dim.0;
+//let n = $dim.1;
 
-        //#[test]
-        //fn $name() {
-            //let m = $dim.0;
-            //let n = $dim.1;
+//let sigma_max = 1.0;
+//let sigma_min = 1E-10;
+//let mut rng = rand::thread_rng();
+//let mat = <$scalar>::random_approximate_low_rank_matrix((m, n), sigma_max, sigma_min, &mut rng);
 
-            //let sigma_max = 1.0;
-            //let sigma_min = 1E-10;
-            //let mut rng = rand::thread_rng();
-            //let mat = <$scalar>::random_approximate_low_rank_matrix((m, n), sigma_max, sigma_min, &mut rng);
+//let qr = mat.pivoted_qr().unwrap().compress(CompressionType::ADAPTIVE($tol)).unwrap();
 
-            //let qr = mat.pivoted_qr().unwrap().compress(CompressionType::ADAPTIVE($tol)).unwrap();
+//// Compare with original matrix
 
-            //// Compare with original matrix
+//assert!(qr.to_mat().rel_diff(&mat) < 5.0 * $tol);
 
-            //assert!(qr.to_mat().rel_diff(&mat) < 5.0 * $tol);
+//// Make sure new rank is smaller than original rank
 
-            //// Make sure new rank is smaller than original rank
+//assert!(qr.q.ncols() < m.min(n));
+//}
 
-            //assert!(qr.q.ncols() < m.min(n));
-        //}
+//)*
 
+//}
+//}
 
-            //)*
+//qr_compression_by_rank_tests! {
+//test_qr_compression_by_rank_f32_thin: f32, (100, 50), 1E-4,
+//test_qr_compression_by_rank_c32_thin: ndarray_linalg::c32, (100, 50), 1E-4,
+//test_qr_compression_by_rank_f64_thin: f64, (100, 50), 1E-4,
+//test_qr_compression_by_rank_c64_thin: ndarray_linalg::c64, (100, 50), 1E-4,
+//test_qr_compression_by_rank_f32_thick: f32, (50, 100), 1E-4,
+//test_qr_compression_by_rank_c32_thick: ndarray_linalg::c32, (50, 100), 1E-4,
+//test_qr_compression_by_rank_f64_thick: f64, (50, 100), 1E-4,
+//test_qr_compression_by_rank_c64_thick: ndarray_linalg::c64, (50, 100), 1E-4,
+//}
 
-        //}
-    //}
-
-    //qr_compression_by_rank_tests! {
-        //test_qr_compression_by_rank_f32_thin: f32, (100, 50), 1E-4,
-        //test_qr_compression_by_rank_c32_thin: ndarray_linalg::c32, (100, 50), 1E-4,
-        //test_qr_compression_by_rank_f64_thin: f64, (100, 50), 1E-4,
-        //test_qr_compression_by_rank_c64_thin: ndarray_linalg::c64, (100, 50), 1E-4,
-        //test_qr_compression_by_rank_f32_thick: f32, (50, 100), 1E-4,
-        //test_qr_compression_by_rank_c32_thick: ndarray_linalg::c32, (50, 100), 1E-4,
-        //test_qr_compression_by_rank_f64_thick: f64, (50, 100), 1E-4,
-        //test_qr_compression_by_rank_c64_thick: ndarray_linalg::c64, (50, 100), 1E-4,
-    //}
-
-    //qr_compression_by_tol_tests! {
-        //test_qr_compression_by_tol_f32_thin: f32, (100, 50), 1E-4,
-        //test_qr_compression_by_tol_c32_thin: ndarray_linalg::c32, (100, 50), 1E-4,
-        //test_qr_compression_by_tol_f64_thin: f64, (100, 50), 1E-4,
-        //test_qr_compression_by_tol_c64_thin: ndarray_linalg::c64, (100, 50), 1E-4,
-        //test_qr_compression_by_tol_f32_thick: f32, (50, 100), 1E-4,
-        //test_qr_compression_by_tol_c32_thick: ndarray_linalg::c32, (50, 100), 1E-4,
-        //test_qr_compression_by_tol_f64_thick: f64, (50, 100), 1E-4,
-        //test_qr_compression_by_tol_c64_thick: ndarray_linalg::c64, (50, 100), 1E-4,
-    //}
+//qr_compression_by_tol_tests! {
+//test_qr_compression_by_tol_f32_thin: f32, (100, 50), 1E-4,
+//test_qr_compression_by_tol_c32_thin: ndarray_linalg::c32, (100, 50), 1E-4,
+//test_qr_compression_by_tol_f64_thin: f64, (100, 50), 1E-4,
+//test_qr_compression_by_tol_c64_thin: ndarray_linalg::c64, (100, 50), 1E-4,
+//test_qr_compression_by_tol_f32_thick: f32, (50, 100), 1E-4,
+//test_qr_compression_by_tol_c32_thick: ndarray_linalg::c32, (50, 100), 1E-4,
+//test_qr_compression_by_tol_f64_thick: f64, (50, 100), 1E-4,
+//test_qr_compression_by_tol_c64_thick: ndarray_linalg::c64, (50, 100), 1E-4,
+//}
 //}

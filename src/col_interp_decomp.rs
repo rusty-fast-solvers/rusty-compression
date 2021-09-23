@@ -5,8 +5,8 @@ use crate::prelude::MatrixPermutationMode;
 use crate::prelude::QRContainer;
 use crate::prelude::ScalarType;
 use crate::Result;
-use ndarray::{s, Array1, Array2, ArrayBase, Axis, Data, Ix2, Ix1, OwnedRepr};
-use ndarray_linalg::{SolveTriangular, UPLO, Diag};
+use ndarray::{s, Array1, Array2, ArrayBase, Axis, Data, Ix1, Ix2, OwnedRepr};
+use ndarray_linalg::{Diag, SolveTriangular, UPLO};
 
 pub struct ColumnIDResult<A: ScalarType> {
     pub c: Array2<A>,
@@ -46,7 +46,7 @@ impl<A: ScalarType> ColumnIDResult<A> {
     pub fn apply_vector<S: Data<Elem = A>>(
         &self,
         other: &ArrayBase<S, Ix1>,
-        ) -> ArrayBase<OwnedRepr<A>, Ix1> {
+    ) -> ArrayBase<OwnedRepr<A>, Ix1> {
         self.c.dot(&self.z.dot(other))
     }
 
@@ -80,8 +80,11 @@ impl<A: ScalarType> QRContainer<A> {
                 .axis_iter(Axis(1))
                 .enumerate()
             {
-                z.index_axis_mut(Axis(1), rank + index)
-                    .assign(&first_part.solve_triangular(UPLO::Upper, Diag::NonUnit, &col.to_owned()).unwrap());
+                z.index_axis_mut(Axis(1), rank + index).assign(
+                    &first_part
+                        .solve_triangular(UPLO::Upper, Diag::NonUnit, &col.to_owned())
+                        .unwrap(),
+                );
             }
 
             Ok(ColumnIDResult::<A> {

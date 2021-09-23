@@ -100,8 +100,8 @@ mod tests {
     use crate::prelude::CompressionType;
     use crate::prelude::RelDiff;
     use crate::random_matrix::RandomMatrix;
-    use ndarray_linalg::OperationNorm;
     use ndarray::Axis;
+    use ndarray_linalg::OperationNorm;
 
     macro_rules! svd_to_qr_tests {
         ($($name:ident: $scalar:ty, $dim:expr, $tol:expr,)*) => {

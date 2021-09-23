@@ -118,7 +118,7 @@ mod tests {
                     //if tmp >= 5.0 * $tol {
                         //println!(" Rel Error {}", tmp);
                     //}
- 
+
                     assert!((two_sided_id.x[[row_index, col_index]] - mat_permuted[[row_index, col_index]]).abs()
                             < 10.0 * $tol * mat_permuted[[row_index, col_index]].abs())
                 }

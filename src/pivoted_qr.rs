@@ -2,9 +2,9 @@
 //! corresponding Lapack routine. Pivoted QR is currently not
 //! implemented in ndarray-linalg, making this module necessary.
 
-use ndarray::{Array2, ArrayBase, Data, Ix2, ShapeBuilder};
 use crate::prelude::QRContainer;
 use crate::Result;
+use ndarray::{Array2, ArrayBase, Data, Ix2, ShapeBuilder};
 
 pub trait PivotedQR {
     type Q: HasPivotedQR;
@@ -29,27 +29,24 @@ where
     }
 }
 
-pub trait HasPivotedQR: imp::PivotedQRImpl {
-}
+pub trait HasPivotedQR: imp::PivotedQRImpl {}
 
-impl<A : imp::PivotedQRImpl> HasPivotedQR for A {}
-
+impl<A: imp::PivotedQRImpl> HasPivotedQR for A {}
 
 mod imp {
 
+    use crate::Result;
     use lax;
     use ndarray::{s, Array1, Array2};
     use ndarray_linalg::layout::AllocatedArray;
     use ndarray_linalg::{IntoTriangular, Lapack, MatrixLayout, Scalar};
     use num::traits::{ToPrimitive, Zero};
-    use crate::Result;
 
     pub trait PivotedQRImpl
     where
         Self: Scalar + Lapack,
     {
-        fn pivoted_qr_impl(mat: Array2<Self>)
-            -> Result<super::QRContainer<Self>>;
+        fn pivoted_qr_impl(mat: Array2<Self>) -> Result<super::QRContainer<Self>>;
         fn pivoted_qr_decomp(
             mat: &mut [Self],
             layout: MatrixLayout,

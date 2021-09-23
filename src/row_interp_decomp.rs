@@ -1,12 +1,12 @@
 //! Implementation of the interpolative decomposition.
 
 use crate::prelude::ApplyPermutationToMatrix;
-use crate::prelude::MatrixPermutationMode;
 use crate::prelude::LQContainer;
+use crate::prelude::MatrixPermutationMode;
 use crate::prelude::ScalarType;
 use crate::Result;
-use ndarray::{s, Array1, Array2, ArrayBase, Axis, Data, Ix2, Ix1, OwnedRepr};
-use ndarray_linalg::{SolveTriangular, UPLO, Diag};
+use ndarray::{s, Array1, Array2, ArrayBase, Axis, Data, Ix1, Ix2, OwnedRepr};
+use ndarray_linalg::{Diag, SolveTriangular, UPLO};
 
 pub struct RowIDResult<A: ScalarType> {
     pub x: Array2<A>,
@@ -41,7 +41,7 @@ impl<A: ScalarType> RowIDResult<A> {
     pub fn apply_vector<S: Data<Elem = A>>(
         &self,
         other: &ArrayBase<S, Ix1>,
-        ) -> ArrayBase<OwnedRepr<A>, Ix1> {
+    ) -> ArrayBase<OwnedRepr<A>, Ix1> {
         self.x.dot(&self.r.dot(other))
     }
 
@@ -76,8 +76,11 @@ impl<A: ScalarType> LQContainer<A> {
                 .axis_iter(Axis(0))
                 .enumerate()
             {
-                x.index_axis_mut(Axis(0), rank + index)
-                    .assign(&first_part_transposed.solve_triangular(UPLO::Upper, Diag::NonUnit, &row.to_owned()).unwrap());
+                x.index_axis_mut(Axis(0), rank + index).assign(
+                    &first_part_transposed
+                        .solve_triangular(UPLO::Upper, Diag::NonUnit, &row.to_owned())
+                        .unwrap(),
+                );
             }
 
             Ok(RowIDResult::<A> {

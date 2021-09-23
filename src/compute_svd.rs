@@ -1,8 +1,8 @@
 //! A simple trait to wrap SVD Computation.
 
-use crate::Result;
 use crate::prelude::SVDContainer;
 use crate::prelude::ScalarType;
+use crate::Result;
 use ndarray::{ArrayBase, Data, Ix2};
 use ndarray_linalg::SVDDCInto;
 
@@ -11,7 +11,6 @@ pub trait ComputeSVD {
 
     fn compute_svd(&self) -> Result<SVDContainer<Self::A>>;
 }
-
 
 impl<A, S> ComputeSVD for ArrayBase<S, Ix2>
 where

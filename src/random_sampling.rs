@@ -1,11 +1,11 @@
 //! Random sampling of matrices
 
 use crate::prelude::CompressionType;
-use crate::prelude::PivotedQR;
 use crate::prelude::ComputeSVD;
+use crate::prelude::PivotedQR;
 use crate::prelude::QRContainer;
-use crate::prelude::SVDContainer;
 use crate::prelude::RandomMatrix;
+use crate::prelude::SVDContainer;
 use crate::prelude::ScalarType;
 use crate::Result;
 use ndarray::{concatenate, Array1, Array2, ArrayBase, ArrayView1, ArrayView2, Axis, Data, Ix2};

@@ -192,15 +192,13 @@ mod tests {
             mat_right_col_shift == mat.apply_permutation(perm.view(), MatrixPermutationMode::COL)
         );
         assert!(
-            mat_left_col_shift
-                == mat.apply_permutation(perm.view(), MatrixPermutationMode::COLINV)
+            mat_left_col_shift == mat.apply_permutation(perm.view(), MatrixPermutationMode::COLINV)
         );
         assert!(
             mat_right_row_shift == mat.apply_permutation(perm.view(), MatrixPermutationMode::ROW)
         );
         assert!(
-            mat_left_row_shift
-                == mat.apply_permutation(perm.view(), MatrixPermutationMode::ROWINV)
+            mat_left_row_shift == mat.apply_permutation(perm.view(), MatrixPermutationMode::ROWINV)
         );
     }
 
