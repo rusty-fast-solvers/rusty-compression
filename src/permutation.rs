@@ -1,7 +1,7 @@
 //! Traits and functions for permutation vectors.
 
-use crate::prelude::ScalarType;
 use ndarray::{Array1, Array2, ArrayBase, ArrayView1, Axis, Data, Ix1, Ix2};
+use rusty_base::types::Scalar;
 
 pub enum MatrixPermutationMode {
     COL,
@@ -58,7 +58,7 @@ pub trait ApplyPermutationToVector {
 
 impl<A, S> ApplyPermutationToMatrix for ArrayBase<S, Ix2>
 where
-    A: ScalarType,
+    A: Scalar,
     S: Data<Elem = A>,
 {
     type A = A;
@@ -128,7 +128,7 @@ where
 
 impl<A, S> ApplyPermutationToVector for ArrayBase<S, Ix1>
 where
-    A: ScalarType,
+    A: Scalar,
     S: Data<Elem = A>,
 {
     type A = A;

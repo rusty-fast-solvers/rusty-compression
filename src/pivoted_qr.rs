@@ -2,45 +2,49 @@
 //! corresponding Lapack routine. Pivoted QR is currently not
 //! implemented in ndarray-linalg, making this module necessary.
 
-use crate::prelude::QRContainer;
-use crate::Result;
+use crate::pivoted_qr::imp::PivotedQRImpl;
+use crate::qr_container::QRContainer;
 use ndarray::{Array2, ArrayBase, Data, Ix2, ShapeBuilder};
+use rusty_base::types::Result;
+use rusty_base::types::{c32, c64, Scalar};
 
 pub trait PivotedQR {
-    type Q: HasPivotedQR;
-
-    fn pivoted_qr(&self) -> Result<QRContainer<Self::Q>>;
+    type A: Scalar;
+    fn pivoted_qr<S>(arr: ArrayBase<S, Ix2>) -> Result<QRContainer<Self::A>>
+    where
+        S: Data<Elem = Self::A>;
 }
 
-impl<A, S> PivotedQR for ArrayBase<S, Ix2>
-where
-    A: HasPivotedQR,
-    S: Data<Elem = A>,
-{
-    type Q = A;
-
-    fn pivoted_qr(&self) -> Result<QRContainer<Self::Q>> {
-        let m = self.nrows();
-        let n = self.ncols();
-
-        let mut mat_fortran = Array2::<Self::Q>::zeros((m, n).f());
-        mat_fortran.assign(&self);
-        A::pivoted_qr_impl(mat_fortran)
-    }
+macro_rules! pivoted_qr_impl {
+    ($scalar:ty) => {
+        impl PivotedQR for $scalar {
+            type A = Self;
+            fn pivoted_qr<S: Data<Elem = Self::A>>(
+                arr: ArrayBase<S, Ix2>,
+            ) -> Result<QRContainer<Self>> {
+                let m = arr.nrows();
+                let n = arr.ncols();
+                let mut mat_fortran = Array2::<Self::A>::zeros((m, n).f());
+                mat_fortran.assign(&arr);
+                <$scalar>::pivoted_qr_impl(mat_fortran)
+            }
+        }
+    };
 }
 
-pub trait HasPivotedQR: imp::PivotedQRImpl {}
-
-impl<A: imp::PivotedQRImpl> HasPivotedQR for A {}
+pivoted_qr_impl!(f32);
+pivoted_qr_impl!(f64);
+pivoted_qr_impl!(c32);
+pivoted_qr_impl!(c64);
 
 mod imp {
 
-    use crate::Result;
     use lax;
     use ndarray::{s, Array1, Array2};
     use ndarray_linalg::layout::AllocatedArray;
     use ndarray_linalg::{IntoTriangular, Lapack, MatrixLayout, Scalar};
     use num::traits::{ToPrimitive, Zero};
+    use rusty_base::types::Result;
 
     pub trait PivotedQRImpl
     where
@@ -188,7 +192,7 @@ mod tests {
 
         #[test]
         fn $name() {
-            use crate::prelude::RandomMatrix;
+            use crate::random_matrix::RandomMatrix;
             use ndarray_linalg::Norm;
             use ndarray_linalg::Scalar;
 
@@ -198,13 +202,14 @@ mod tests {
             let mut rng = rand::thread_rng();
             let mat = <$scalar>::random_approximate_low_rank_matrix((m, n), 1.0, 1E-5, &mut rng);
 
-            let qr_result = mat.pivoted_qr().unwrap();
+            let qr_result = <$scalar>::pivoted_qr(mat.view()).unwrap();
 
             let prod = qr_result.q.dot(&qr_result.r);
 
             // Check orthogonality of Q.T x Q
 
             let qtq = qr_result.q.t().map(|&item| item.conj()).dot(&qr_result.q);
+            println!("rows {}",qr_result.r.ncols());
 
             for ((i, j), &val) in qtq.indexed_iter() {
                 if i == j {
