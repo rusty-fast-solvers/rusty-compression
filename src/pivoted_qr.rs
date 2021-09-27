@@ -3,14 +3,14 @@
 //! implemented in ndarray-linalg, making this module necessary.
 
 use crate::pivoted_qr::imp::PivotedQRImpl;
-use crate::qr_container::QRContainer;
+use crate::qr::QRData;
 use ndarray::{Array2, ArrayBase, Data, Ix2, ShapeBuilder};
 use rusty_base::types::Result;
 use rusty_base::types::{c32, c64, Scalar};
 
-pub trait PivotedQR {
+pub(crate) trait PivotedQR {
     type A: Scalar;
-    fn pivoted_qr<S>(arr: ArrayBase<S, Ix2>) -> Result<QRContainer<Self::A>>
+    fn pivoted_qr<S>(arr: ArrayBase<S, Ix2>) -> Result<QRData<Self::A>>
     where
         S: Data<Elem = Self::A>;
 }
@@ -19,9 +19,7 @@ macro_rules! pivoted_qr_impl {
     ($scalar:ty) => {
         impl PivotedQR for $scalar {
             type A = Self;
-            fn pivoted_qr<S: Data<Elem = Self::A>>(
-                arr: ArrayBase<S, Ix2>,
-            ) -> Result<QRContainer<Self>> {
+            fn pivoted_qr<S: Data<Elem = Self::A>>(arr: ArrayBase<S, Ix2>) -> Result<QRData<Self>> {
                 let m = arr.nrows();
                 let n = arr.ncols();
                 let mut mat_fortran = Array2::<Self::A>::zeros((m, n).f());
@@ -50,7 +48,7 @@ mod imp {
     where
         Self: Scalar + Lapack,
     {
-        fn pivoted_qr_impl(mat: Array2<Self>) -> Result<super::QRContainer<Self>>;
+        fn pivoted_qr_impl(mat: Array2<Self>) -> Result<super::QRData<Self>>;
         fn pivoted_qr_decomp(
             mat: &mut [Self],
             layout: MatrixLayout,
@@ -69,7 +67,7 @@ mod imp {
             impl PivotedQRImpl for $scalar {
                 fn pivoted_qr_impl(
                     mut mat: Array2<Self>,
-                ) -> Result<super::QRContainer<$scalar>> {
+                ) -> Result<super::QRData<$scalar>> {
                     let m = mat.nrows();
                     let n = mat.ncols();
                     let k = m.min(n);
@@ -104,7 +102,7 @@ mod imp {
 
                     // Finally, return the QR decomposition.
 
-                    Ok(super::QRContainer{q: q_mat, r:r_mat, ind: jpvt})
+                    Ok(super::QRData{q: q_mat, r:r_mat, ind: jpvt})
                 }
 
                 fn pivoted_qr_decomp(

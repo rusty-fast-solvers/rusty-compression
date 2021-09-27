@@ -1,38 +1,50 @@
 //! This module collects the various traits definitions
 
-use crate::prelude::ScalarType;
-use ndarray::{ArrayBase, Data, Ix1, Ix2};
+use ndarray::{ArrayView1, ArrayView2};
+use ndarray_linalg::Norm;
 use ndarray_linalg::OperationNorm;
-use ndarray_linalg::{Norm, Scalar};
+use rusty_base::types::{c32, c64, Scalar};
 
 pub trait RelDiff {
-    type A: ScalarType;
+    type A: Scalar;
 
-    fn rel_diff(&self, other: &Self) -> <Self::A as Scalar>::Real;
+    /// Return the relative Frobenius norm difference of `first` and `second`.
+    fn rel_diff_fro(
+        first: ArrayView2<Self::A>,
+        second: ArrayView2<Self::A>,
+    ) -> <<Self as RelDiff>::A as Scalar>::Real;
+
+    /// Return the relative l2 vector norm difference of `first` and `second`.
+    fn rel_diff_l2(
+        first: ArrayView1<Self::A>,
+        second: ArrayView1<Self::A>,
+    ) -> <<Self as RelDiff>::A as Scalar>::Real;
 }
 
-impl<A, S> RelDiff for ArrayBase<S, Ix2>
-where
-    A: ScalarType,
-    S: Data<Elem = A>,
-{
-    type A = A;
-    fn rel_diff(&self, other: &Self) -> <Self::A as Scalar>::Real {
-        let diff = self - &other;
+macro_rules! rel_diff_impl {
+    ($scalar:ty) => {
+        impl RelDiff for $scalar {
+            type A = $scalar;
+            fn rel_diff_fro(
+                first: ArrayView2<Self::A>,
+                second: ArrayView2<Self::A>,
+            ) -> <<Self as RelDiff>::A as Scalar>::Real {
+                let diff = first.to_owned() - &second;
+                diff.opnorm_fro().unwrap() / second.opnorm_fro().unwrap()
+            }
 
-        diff.opnorm_fro().unwrap() / other.opnorm_fro().unwrap()
-    }
+            fn rel_diff_l2(
+                first: ArrayView1<Self::A>,
+                second: ArrayView1<Self::A>,
+            ) -> <<Self as RelDiff>::A as Scalar>::Real {
+                let diff = first.to_owned() - &second;
+                diff.norm_l2() / second.norm_l2()
+            }
+        }
+    };
 }
 
-impl<A, S> RelDiff for ArrayBase<S, Ix1>
-where
-    A: ScalarType,
-    S: Data<Elem = A>,
-{
-    type A = A;
-    fn rel_diff(&self, other: &Self) -> <Self::A as Scalar>::Real {
-        let diff = self - &other;
-
-        diff.norm_l2() / other.norm_l2()
-    }
-}
+rel_diff_impl!(f32);
+rel_diff_impl!(f64);
+rel_diff_impl!(c32);
+rel_diff_impl!(c64);
