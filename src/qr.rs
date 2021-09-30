@@ -1,9 +1,11 @@
 //! A container for QR Decompositions.
 
+use crate::col_interp_decomp::ColumnIDData;
 use crate::permutation::{ApplyPermutationToMatrix, MatrixPermutationMode};
 use crate::pivoted_qr::PivotedQR;
 use crate::CompressionType;
-use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2};
+use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2, Axis};
+use ndarray_linalg::{Diag, SolveTriangular, UPLO};
 use num::ToPrimitive;
 use rusty_base::types::{c32, c64, Result, Scalar};
 
@@ -45,8 +47,8 @@ pub trait QR {
             max_rank = q.ncols()
         }
 
-        let q = q.slice_move(s![.., 0..max_rank]);
-        let r = r.slice_move(s![0..max_rank, ..]);
+        let q = q.slice(s![.., 0..max_rank]);
+        let r = r.slice(s![0..max_rank, ..]);
 
         Ok(QRData {
             q: q.into_owned(),
@@ -76,6 +78,8 @@ pub trait QR {
             CompressionType::RANK(rank) => self.compress_qr_rank(rank),
         }
     }
+
+    fn column_id(&self) -> Result<ColumnIDData<Self::A>>;
 
     fn new(arr: ArrayView2<Self::A>) -> Result<QRData<Self::A>>;
 
@@ -116,6 +120,47 @@ macro_rules! qr_data_impl {
 
             fn get_ind_mut(&mut self) -> ArrayViewMut1<usize> {
                 self.ind.view_mut()
+            }
+
+            fn column_id(&self) -> Result<ColumnIDData<Self::A>> {
+                let rank = self.rank();
+                let nrcols = self.ncols();
+
+                if rank == nrcols {
+                    // Matrix not rank deficient.
+                    Ok(ColumnIDData::<Self::A> {
+                        c: self.get_q().dot(&self.get_r()),
+                        z: Array2::<Self::A>::eye(rank)
+                            .apply_permutation(self.get_ind(), MatrixPermutationMode::COLINV),
+                        col_ind: self.get_ind().into_owned(),
+                    })
+                } else {
+                    // Matrix is rank deficient.
+
+                    let mut z = Array2::<Self::A>::zeros((rank, self.get_r().ncols()));
+                    z.slice_mut(s![.., 0..rank]).diag_mut().fill(num::one());
+                    let first_part = self.get_r().slice(s![.., 0..rank]).to_owned();
+                    let c = self.get_q().dot(&first_part);
+
+                    for (index, col) in self
+                        .get_r()
+                        .slice(s![.., rank..nrcols])
+                        .axis_iter(Axis(1))
+                        .enumerate()
+                    {
+                        z.index_axis_mut(Axis(1), rank + index).assign(
+                            &first_part
+                                .solve_triangular(UPLO::Upper, Diag::NonUnit, &col.to_owned())
+                                .unwrap(),
+                        );
+                    }
+
+                    Ok(ColumnIDData::<Self::A> {
+                        c,
+                        z: z.apply_permutation(self.get_ind(), MatrixPermutationMode::COLINV),
+                        col_ind: self.get_ind().into_owned(),
+                    })
+                }
             }
         }
     };
@@ -197,6 +242,59 @@ mod tests {
             )*
 
         }
+    }
+
+    macro_rules! id_compression_tests {
+
+        ($($name:ident: $scalar:ty, $dim:expr, $tol:expr,)*) => {
+
+            $(
+
+        #[test]
+        fn $name() {
+            let m = $dim.0;
+            let n = $dim.1;
+
+            let sigma_max = 1.0;
+            let sigma_min = 1E-10;
+            let mut rng = rand::thread_rng();
+            let mat = <$scalar>::random_approximate_low_rank_matrix((m, n), sigma_max, sigma_min, &mut rng);
+
+            let qr = QRData::<$scalar>::new(mat.view()).unwrap().compress(CompressionType::ADAPTIVE($tol)).unwrap();
+            let rank = qr.rank();
+            let column_id = qr.column_id().unwrap();
+
+            // Compare with original matrix
+
+            assert!(<$scalar>::rel_diff_fro(column_id.to_mat().view(), mat.view()) < 5.0 * $tol);
+
+            // Now compare the individual columns to make sure that the id basis columns
+            // agree with the corresponding matrix columns.
+
+            let mat_permuted = mat.apply_permutation(column_id.col_ind.view(), MatrixPermutationMode::COL);
+
+            for index in 0..rank {
+                assert!(
+                    <$scalar>::rel_diff_l2(mat_permuted.index_axis(Axis(1), index), column_id.c.index_axis(Axis(1), index)) < $tol);
+
+            }
+
+        }
+
+            )*
+
+        }
+    }
+
+    id_compression_tests! {
+        test_id_compression_by_tol_f32_thin: f32, (100, 50), 1E-4,
+        test_id_compression_by_tol_c32_thin: ndarray_linalg::c32, (100, 50), 1E-4,
+        test_id_compression_by_tol_f64_thin: f64, (100, 50), 1E-4,
+        test_id_compression_by_tol_c64_thin: ndarray_linalg::c64, (100, 50), 1E-4,
+        test_id_compression_by_tol_f32_thick: f32, (50, 100), 1E-4,
+        test_id_compression_by_tol_c32_thick: ndarray_linalg::c32, (50, 100), 1E-4,
+        test_id_compression_by_tol_f64_thick: f64, (50, 100), 1E-4,
+        test_id_compression_by_tol_c64_thick: ndarray_linalg::c64, (50, 100), 1E-4,
     }
 
     qr_compression_by_rank_tests! {
