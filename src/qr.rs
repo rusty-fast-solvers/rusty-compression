@@ -1,6 +1,6 @@
 //! A container for QR Decompositions.
 
-use crate::col_interp_decomp::ColumnIDData;
+use crate::col_interp_decomp::{ColumnID, ColumnIDData};
 use crate::permutation::{ApplyPermutationToMatrix, MatrixPermutationMode};
 use crate::pivoted_qr::PivotedQR;
 use crate::CompressionType;
@@ -18,6 +18,44 @@ pub struct QRData<A: Scalar> {
     /// jth column of Q * R is identical to the
     /// kth column of the original matrix A.
     pub ind: Array1<usize>,
+}
+
+pub struct LQData<A: Scalar> {
+    /// The Q matrix from the LQ Decomposition
+    pub l: Array2<A>,
+    /// The Q matrix from the LQ Decomposition
+    pub q: Array2<A>,
+    /// An index array. If ind[j] = k then the
+    /// jth row of L * Q is identical to the
+    /// kth row of the original matrix A.
+    pub ind: Array1<usize>,
+}
+
+pub trait LQ {
+    type A: Scalar;
+
+    fn nrows(&self) -> usize {
+        self.get_l().nrows()
+    }
+    fn ncols(&self) -> usize {
+        self.get_q().ncols()
+    }
+    fn rank(&self) -> usize {
+        self.get_q().nrows()
+    }
+    fn to_mat(&self) -> Array2<Self::A> {
+        self.get_l()
+            .apply_permutation(self.get_ind(), MatrixPermutationMode::ROWINV)
+            .dot(&self.get_q())
+    }
+
+    fn get_q(&self) -> ArrayView2<Self::A>;
+    fn get_l(&self) -> ArrayView2<Self::A>;
+    fn get_ind(&self) -> ArrayView1<usize>;
+
+    fn get_q_mut(&mut self) -> ArrayViewMut2<Self::A>;
+    fn get_l_mut(&mut self) -> ArrayViewMut2<Self::A>;
+    fn get_ind_mut(&mut self) -> ArrayViewMut1<usize>;
 }
 
 pub trait QR {
@@ -128,12 +166,12 @@ macro_rules! qr_data_impl {
 
                 if rank == nrcols {
                     // Matrix not rank deficient.
-                    Ok(ColumnIDData::<Self::A> {
-                        c: self.get_q().dot(&self.get_r()),
-                        z: Array2::<Self::A>::eye(rank)
+                    Ok(ColumnIDData::<Self::A>::new(
+                        self.get_q().dot(&self.get_r()),
+                        Array2::<Self::A>::eye(rank)
                             .apply_permutation(self.get_ind(), MatrixPermutationMode::COLINV),
-                        col_ind: self.get_ind().into_owned(),
-                    })
+                        self.get_ind().into_owned(),
+                    ))
                 } else {
                     // Matrix is rank deficient.
 
@@ -155,11 +193,11 @@ macro_rules! qr_data_impl {
                         );
                     }
 
-                    Ok(ColumnIDData::<Self::A> {
+                    Ok(ColumnIDData::<Self::A>::new(
                         c,
-                        z: z.apply_permutation(self.get_ind(), MatrixPermutationMode::COLINV),
-                        col_ind: self.get_ind().into_owned(),
-                    })
+                        z.apply_permutation(self.get_ind(), MatrixPermutationMode::COLINV),
+                        self.get_ind().into_owned(),
+                    ))
                 }
             }
         }
@@ -271,11 +309,11 @@ mod tests {
             // Now compare the individual columns to make sure that the id basis columns
             // agree with the corresponding matrix columns.
 
-            let mat_permuted = mat.apply_permutation(column_id.col_ind.view(), MatrixPermutationMode::COL);
+            let mat_permuted = mat.apply_permutation(column_id.get_col_ind(), MatrixPermutationMode::COL);
 
             for index in 0..rank {
                 assert!(
-                    <$scalar>::rel_diff_l2(mat_permuted.index_axis(Axis(1), index), column_id.c.index_axis(Axis(1), index)) < $tol);
+                    <$scalar>::rel_diff_l2(mat_permuted.index_axis(Axis(1), index), column_id.get_c().index_axis(Axis(1), index)) < $tol);
 
             }
 

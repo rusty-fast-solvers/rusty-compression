@@ -5,6 +5,12 @@ use ndarray_linalg::Norm;
 use ndarray_linalg::OperationNorm;
 use rusty_base::types::{c32, c64, Scalar};
 
+pub trait Apply<A, Rhs> {
+    type Output;
+
+    fn dot(&self, rhs: &Rhs) -> Self::Output;
+}
+
 pub trait RelDiff {
     type A: Scalar;
 

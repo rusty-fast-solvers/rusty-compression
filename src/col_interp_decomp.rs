@@ -1,158 +1,104 @@
 //! Implementation of the interpolative decomposition.
 
-use crate::permutation::ApplyPermutationToMatrix;
-use crate::permutation::MatrixPermutationMode;
-use crate::qr::QRData;
-use ndarray::{s, Array1, Array2, ArrayBase, Axis, Data, Ix1, Ix2, OwnedRepr};
-use ndarray_linalg::{Diag, SolveTriangular, UPLO};
-use rusty_base::types::{Result, Scalar};
+use crate::helpers::Apply;
+use ndarray::{
+    Array1, Array2, ArrayBase, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2, Data, Ix1, Ix2,
+};
+use rusty_base::types::{c32, c64, Scalar};
 
 pub struct ColumnIDData<A: Scalar> {
-    pub c: Array2<A>,
-    pub z: Array2<A>,
-    pub col_ind: Array1<usize>,
+    c: Array2<A>,
+    z: Array2<A>,
+    col_ind: Array1<usize>,
 }
 
-// pub struct RowIDResult<A: ScalarType> {
-//     pub x: Array2<A>,
-//     pub row_ind: Array1<usize>,
-// }
+pub trait ColumnID {
+    type A: Scalar;
 
-impl<A: Scalar> ColumnIDData<A> {
-    pub fn nrows(&self) -> usize {
-        self.c.nrows()
+    fn nrows(&self) -> usize {
+        self.get_c().nrows()
     }
 
-    pub fn ncols(&self) -> usize {
-        self.z.ncols()
+    fn ncols(&self) -> usize {
+        self.get_z().ncols()
     }
 
-    pub fn rank(&self) -> usize {
-        self.c.ncols()
+    fn rank(&self) -> usize {
+        self.get_c().ncols()
     }
 
-    pub fn to_mat(&self) -> Array2<A> {
-        self.c.dot(&self.z)
+    fn to_mat(&self) -> Array2<Self::A> {
+        self.get_c().dot(&self.get_z())
     }
 
-    pub fn apply_matrix<S: Data<Elem = A>>(
-        &self,
-        other: &ArrayBase<S, Ix2>,
-    ) -> ArrayBase<OwnedRepr<A>, Ix2> {
-        self.c.dot(&self.z.dot(other))
-    }
+    fn get_c(&self) -> ArrayView2<Self::A>;
+    fn get_z(&self) -> ArrayView2<Self::A>;
+    fn get_col_ind(&self) -> ArrayView1<usize>;
 
-    pub fn apply_vector<S: Data<Elem = A>>(
-        &self,
-        other: &ArrayBase<S, Ix1>,
-    ) -> ArrayBase<OwnedRepr<A>, Ix1> {
-        self.c.dot(&self.z.dot(other))
-    }
+    fn get_c_mut(&mut self) -> ArrayViewMut2<Self::A>;
+    fn get_z_mut(&mut self) -> ArrayViewMut2<Self::A>;
+    fn get_col_ind_mut(&mut self) -> ArrayViewMut1<usize>;
+
+    fn new(c: Array2<Self::A>, z: Array2<Self::A>, col_ind: Array1<usize>) -> Self;
 }
 
-// impl<A: ScalarType> QRContainer<A> {
-//     pub fn column_id(&self) -> Result<ColumnIDResult<A>> {
-//         let rank = self.rank();
-//         let nrcols = self.ncols();
+macro_rules! impl_col_id {
+    ($scalar:ty) => {
+        impl ColumnID for ColumnIDData<$scalar> {
+            type A = $scalar;
+            fn get_c(&self) -> ArrayView2<Self::A> {
+                self.c.view()
+            }
+            fn get_z(&self) -> ArrayView2<Self::A> {
+                self.z.view()
+            }
 
-//         if rank == nrcols {
-//             // Matrix not rank deficient.
-//             Ok(ColumnIDResult::<A> {
-//                 c: self.q.dot(&self.r),
-//                 z: Array2::<A>::eye(rank)
-//                     .apply_permutation(self.ind.view(), MatrixPermutationMode::COLINV),
-//                 col_ind: self.ind.clone(),
-//             })
-//         } else {
-//             // Matrix is rank deficient.
+            fn get_col_ind(&self) -> ArrayView1<usize> {
+                self.col_ind.view()
+            }
 
-//             let mut z = Array2::<A>::zeros((rank, self.r.ncols()));
-//             z.slice_mut(s![.., 0..rank]).diag_mut().fill(num::one());
-//             let first_part = self.r.slice(s![.., 0..rank]).to_owned();
-//             let c = self.q.dot(&first_part);
+            fn get_c_mut(&mut self) -> ArrayViewMut2<Self::A> {
+                self.c.view_mut()
+            }
+            fn get_z_mut(&mut self) -> ArrayViewMut2<Self::A> {
+                self.z.view_mut()
+            }
+            fn get_col_ind_mut(&mut self) -> ArrayViewMut1<usize> {
+                self.col_ind.view_mut()
+            }
 
-//             for (index, col) in self
-//                 .r
-//                 .slice(s![.., rank..nrcols])
-//                 .axis_iter(Axis(1))
-//                 .enumerate()
-//             {
-//                 z.index_axis_mut(Axis(1), rank + index).assign(
-//                     &first_part
-//                         .solve_triangular(UPLO::Upper, Diag::NonUnit, &col.to_owned())
-//                         .unwrap(),
-//                 );
-//             }
+            fn new(c: Array2<Self::A>, z: Array2<Self::A>, col_ind: Array1<usize>) -> Self {
+                ColumnIDData::<$scalar> { c, z, col_ind }
+            }
+        }
 
-//             Ok(ColumnIDResult::<A> {
-//                 c,
-//                 z: z.apply_permutation(self.ind.view(), MatrixPermutationMode::COLINV),
-//                 col_ind: self.ind.clone(),
-//             })
-//         }
-//     }
-// }
+        impl<T, S> Apply<$scalar, ArrayBase<S, Ix1>> for T
+        where
+            T: ColumnID<A = $scalar>,
+            S: Data<Elem = $scalar>,
+        {
+            type Output = Array1<$scalar>;
 
-// #[cfg(test)]
-// mod tests {
+            fn dot(&self, rhs: &ArrayBase<S, Ix1>) -> Self::Output {
+                self.get_c().dot(&self.get_z().dot(rhs))
+            }
+        }
 
-//     use crate::prelude::ApplyPermutationToMatrix;
-//     use crate::prelude::CompressionType;
-//     use crate::prelude::MatrixPermutationMode;
-//     use crate::prelude::PivotedQR;
-//     use crate::prelude::RandomMatrix;
-//     use crate::prelude::RelDiff;
-//     use ndarray::Axis;
+        impl<T, S> Apply<$scalar, ArrayBase<S, Ix2>> for T
+        where
+            T: ColumnID<A = $scalar>,
+            S: Data<Elem = $scalar>,
+        {
+            type Output = Array2<$scalar>;
 
-//     macro_rules! id_compression_tests {
+            fn dot(&self, rhs: &ArrayBase<S, Ix2>) -> Self::Output {
+                self.get_c().dot(&self.get_z().dot(rhs))
+            }
+        }
+    };
+}
 
-//         ($($name:ident: $scalar:ty, $dim:expr, $tol:expr,)*) => {
-
-//             $(
-
-//         #[test]
-//         fn $name() {
-//             let m = $dim.0;
-//             let n = $dim.1;
-
-//             let sigma_max = 1.0;
-//             let sigma_min = 1E-10;
-//             let mut rng = rand::thread_rng();
-//             let mat = <$scalar>::random_approximate_low_rank_matrix((m, n), sigma_max, sigma_min, &mut rng);
-
-//             let qr = mat.pivoted_qr().unwrap().compress(CompressionType::ADAPTIVE($tol)).unwrap();
-//             let rank = qr.rank();
-//             let column_id = qr.column_id().unwrap();
-
-//             // Compare with original matrix
-
-//             assert!(column_id.to_mat().rel_diff(&mat) < 5.0 * $tol);
-
-//             // Now compare the individual columns to make sure that the id basis columns
-//             // agree with the corresponding matrix columns.
-
-//             let mat_permuted = mat.apply_permutation(column_id.col_ind.view(), MatrixPermutationMode::COL);
-
-//             for index in 0..rank {
-//                 assert!(mat_permuted.index_axis(Axis(1), index).rel_diff(&column_id.c.index_axis(Axis(1), index)) < $tol);
-
-//             }
-
-//         }
-
-//             )*
-
-//         }
-//     }
-
-//     id_compression_tests! {
-//         test_id_compression_by_tol_f32_thin: f32, (100, 50), 1E-4,
-//         test_id_compression_by_tol_c32_thin: ndarray_linalg::c32, (100, 50), 1E-4,
-//         test_id_compression_by_tol_f64_thin: f64, (100, 50), 1E-4,
-//         test_id_compression_by_tol_c64_thin: ndarray_linalg::c64, (100, 50), 1E-4,
-//         test_id_compression_by_tol_f32_thick: f32, (50, 100), 1E-4,
-//         test_id_compression_by_tol_c32_thick: ndarray_linalg::c32, (50, 100), 1E-4,
-//         test_id_compression_by_tol_f64_thick: f64, (50, 100), 1E-4,
-//         test_id_compression_by_tol_c64_thick: ndarray_linalg::c64, (50, 100), 1E-4,
-//     }
-// }
+impl_col_id!(f32);
+impl_col_id!(f64);
+impl_col_id!(c32);
+impl_col_id!(c64);

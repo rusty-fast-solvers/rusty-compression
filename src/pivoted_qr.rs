@@ -3,7 +3,7 @@
 //! implemented in ndarray-linalg, making this module necessary.
 
 use crate::pivoted_qr::imp::PivotedQRImpl;
-use crate::qr::QRData;
+use crate::qr::{LQData, QRData};
 use ndarray::{Array2, ArrayBase, Data, Ix2, ShapeBuilder};
 use rusty_base::types::Result;
 use rusty_base::types::{c32, c64, Scalar};
@@ -11,6 +11,9 @@ use rusty_base::types::{c32, c64, Scalar};
 pub(crate) trait PivotedQR {
     type A: Scalar;
     fn pivoted_qr<S>(arr: ArrayBase<S, Ix2>) -> Result<QRData<Self::A>>
+    where
+        S: Data<Elem = Self::A>;
+    fn pivoted_lq<S>(arr: ArrayBase<S, Ix2>) -> Result<LQData<Self::A>>
     where
         S: Data<Elem = Self::A>;
 }
@@ -25,6 +28,16 @@ macro_rules! pivoted_qr_impl {
                 let mut mat_fortran = Array2::<Self::A>::zeros((m, n).f());
                 mat_fortran.assign(&arr);
                 <$scalar>::pivoted_qr_impl(mat_fortran)
+            }
+            fn pivoted_lq<S: Data<Elem = Self::A>>(arr: ArrayBase<S, Ix2>) -> Result<LQData<Self>> {
+                let mat_transpose = arr.t().map(|item| item.conj());
+                let qr_data = <$scalar>::pivoted_qr(mat_transpose)?;
+
+                Ok(LQData {
+                    l: qr_data.r.t().map(|item| item.conj()),
+                    q: qr_data.q.t().map(|item| item.conj()),
+                    ind: qr_data.ind,
+                })
             }
         }
     };
@@ -232,6 +245,54 @@ mod tests {
             };
         }
 
+    macro_rules! pivoted_lq_tests {
+
+    ($($name:ident: $scalar:ty, $dim:expr,)*) => {
+
+        $(
+
+        #[test]
+        fn $name() {
+            use crate::random_matrix::RandomMatrix;
+            use ndarray_linalg::Norm;
+
+            let m = $dim.0;
+            let n = $dim.1;
+
+            let mut rng = rand::thread_rng();
+            let mat = <$scalar>::random_approximate_low_rank_matrix((m, n), 1.0, 1E-5, &mut rng);
+
+            let lq_result = <$scalar>::pivoted_lq(mat.view()).unwrap();
+
+            let prod = lq_result.l.dot(&lq_result.q);
+
+            // Check orthogonality of Q x Q^T
+
+            let qqt = lq_result.q.dot(&lq_result.q.t().map(|&item| item.conj()));
+
+            for ((i, j), &val) in qqt.indexed_iter() {
+                if i == j {
+                    let rel_diff = (val - 1.0).abs();
+                    assert!(rel_diff < 1E-6);
+                } else {
+                    assert!(val.abs() < 1E-6);
+                }
+            }
+
+            // Check that the product is correct.
+
+            for (row_index, row) in prod.axis_iter(ndarray::Axis(0)).enumerate() {
+                let perm_index = lq_result.ind[row_index];
+                let diff = row.to_owned() - mat.index_axis(ndarray::Axis(0), perm_index);
+                let rel_diff = diff.norm_l2() / mat.index_axis(ndarray::Axis(0), perm_index).norm_l2();
+
+                assert!(rel_diff < 1E-6);
+            }
+        }
+                )*
+            };
+        }
+
     pivoted_qr_tests! {
         pivoted_qr_test_thin_f64: f64, (100, 50),
         pivoted_qr_test_thin_f32: f32, (100, 50),
@@ -241,5 +302,16 @@ mod tests {
         pivoted_qr_test_thick_f32: f32, (50, 100),
         pivoted_qr_test_thick_c64: ndarray_linalg::c64, (50, 100),
         pivoted_qr_test_thick_c32: ndarray_linalg::c32, (50, 100),
+    }
+
+    pivoted_lq_tests! {
+        pivoted_lq_test_thin_f64: f64, (100, 50),
+        pivoted_lq_test_thin_f32: f32, (100, 50),
+        pivoted_lq_test_thin_c64: ndarray_linalg::c64, (100, 50),
+        pivoted_lq_test_thin_c32: ndarray_linalg::c32, (100, 50),
+        pivoted_lq_test_thick_f64: f64, (50, 100),
+        pivoted_lq_test_thick_f32: f32, (50, 100),
+        pivoted_lq_test_thick_c64: ndarray_linalg::c64, (50, 100),
+        pivoted_lq_test_thick_c32: ndarray_linalg::c32, (50, 100),
     }
 }
