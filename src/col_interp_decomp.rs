@@ -1,4 +1,4 @@
-//! Implementation of the interpolative decomposition.
+//! Data structure for Column Interpolative Decomposition
 
 use crate::helpers::Apply;
 use ndarray::{
@@ -72,27 +72,25 @@ macro_rules! impl_col_id {
             }
         }
 
-        impl<T, S> Apply<$scalar, ArrayBase<S, Ix1>> for T
+        impl<S> Apply<$scalar, ArrayBase<S, Ix1>> for ColumnIDData<$scalar>
         where
-            T: ColumnID<A = $scalar>,
             S: Data<Elem = $scalar>,
         {
             type Output = Array1<$scalar>;
 
             fn dot(&self, rhs: &ArrayBase<S, Ix1>) -> Self::Output {
-                self.get_c().dot(&self.get_z().dot(rhs))
+                self.c.dot(&self.z.dot(rhs))
             }
         }
 
-        impl<T, S> Apply<$scalar, ArrayBase<S, Ix2>> for T
+        impl<S> Apply<$scalar, ArrayBase<S, Ix2>> for ColumnIDData<$scalar>
         where
-            T: ColumnID<A = $scalar>,
             S: Data<Elem = $scalar>,
         {
             type Output = Array2<$scalar>;
 
             fn dot(&self, rhs: &ArrayBase<S, Ix2>) -> Self::Output {
-                self.get_c().dot(&self.get_z().dot(rhs))
+                self.c.dot(&self.z.dot(rhs))
             }
         }
     };

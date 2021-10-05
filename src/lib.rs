@@ -8,7 +8,7 @@ pub mod permutation;
 // pub mod prelude;
 pub mod random_matrix;
 // pub mod random_sampling;
-// pub mod row_interp_decomp;
+pub mod row_interp_decomp;
 pub mod svd;
 // pub mod two_sided_interp_decomp;
 
