@@ -5,10 +5,19 @@ use ndarray_linalg::Norm;
 use ndarray_linalg::OperationNorm;
 use rusty_base::types::{c32, c64, Scalar};
 
-pub trait Apply<A, Rhs> {
+pub trait Apply<A, Lhs>{
     type Output;
 
-    fn dot(&self, rhs: &Rhs) -> Self::Output;
+    fn dot(&self, lhs: &Lhs) -> Self::Output;
+
+}
+
+
+pub trait RApply<A, Lhs> {
+    type Output;
+
+    fn dot(&self, lhs: &Lhs) -> Self::Output;
+    
 }
 
 pub trait RelDiff {

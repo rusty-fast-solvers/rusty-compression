@@ -1,10 +1,13 @@
 //! Data structure for Row Interpolative Decomposition
 
 use crate::helpers::Apply;
+use crate::two_sided_interp_decomp::TwoSidedIDData;
+use crate::qr::{QRData, QR};
+use crate::col_interp_decomp::ColumnID;
 use ndarray::{
     Array1, Array2, ArrayBase, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2, Data, Ix1, Ix2,
 };
-use rusty_base::types::{c32, c64, Scalar};
+use rusty_base::types::{c32, c64, Scalar, Result};
 
 pub struct RowIDData<A: Scalar> {
     x: Array2<A>,
@@ -40,6 +43,9 @@ pub trait RowID {
     fn get_row_ind_mut(&mut self) -> ArrayViewMut1<usize>;
 
     fn new(x: Array2<Self::A>, r: Array2<Self::A>, row_ind: Array1<usize>) -> Self;
+
+    fn two_sided_id(&self) -> Result<TwoSidedIDData<Self::A>>;
+
 }
 
 macro_rules! impl_row_id {
@@ -70,6 +76,19 @@ macro_rules! impl_row_id {
             fn new(x: Array2<Self::A>, r: Array2<Self::A>, row_ind: Array1<usize>) -> Self {
                 RowIDData::<$scalar> { x, r, row_ind }
             }
+
+            fn two_sided_id(&self) -> Result<TwoSidedIDData<Self::A>> {
+                let col_id = QRData::<$scalar>::new(self.r.view())?.column_id()?;
+                Ok(TwoSidedIDData {
+                    c: self.x.to_owned(),
+                    x: col_id.get_c().into_owned(),
+                    r: col_id.get_z().into_owned(),
+                    row_ind: self.row_ind.to_owned(),
+                    col_ind: col_id.get_col_ind().into_owned(),
+
+                })
+            }
+
         }
 
         impl<S> Apply<$scalar, ArrayBase<S, Ix1>> for RowIDData<$scalar>
@@ -101,66 +120,77 @@ impl_row_id!(f64);
 impl_row_id!(c32);
 impl_row_id!(c64);
 
-// #[cfg(test)]
-// mod tests {
+#[cfg(test)]
+mod tests {
 
-//     use crate::prelude::ApplyPermutationToMatrix;
-//     use crate::prelude::CompressionType;
-//     use crate::prelude::MatrixPermutationMode;
-//     use crate::prelude::PivotedLQ;
-//     use crate::prelude::RandomMatrix;
-//     use crate::prelude::RelDiff;
-//     use ndarray::Axis;
+    use crate::permutation::ApplyPermutationToMatrix;
+    use crate::CompressionType;
+    use crate::permutation::MatrixPermutationMode;
+    use crate::qr::{LQ, LQData};
+    use crate::row_interp_decomp::RowID;
+    use crate::two_sided_interp_decomp::TwoSidedID;
+    use crate::random_matrix::RandomMatrix;
+    use crate::helpers::RelDiff;
+    use rusty_base::types::Scalar;
 
-//     macro_rules! id_compression_tests {
+    macro_rules! id_compression_tests {
 
-//         ($($name:ident: $scalar:ty, $dim:expr, $tol:expr,)*) => {
+        ($($name:ident: $scalar:ty, $dim:expr, $tol:expr,)*) => {
 
-//             $(
+            $(
 
-//         #[test]
-//         fn $name() {
-//             let m = $dim.0;
-//             let n = $dim.1;
+        #[test]
+        fn $name() {
+            let m = $dim.0;
+            let n = $dim.1;
 
-//             let sigma_max = 1.0;
-//             let sigma_min = 1E-10;
-//             let mut rng = rand::thread_rng();
-//             let mat = <$scalar>::random_approximate_low_rank_matrix((m, n), sigma_max, sigma_min, &mut rng);
+            let sigma_max = 1.0;
+            let sigma_min = 1E-10;
+            let mut rng = rand::thread_rng();
+            let mat = <$scalar>::random_approximate_low_rank_matrix((m, n), sigma_max, sigma_min, &mut rng);
 
-//             let lq = mat.pivoted_lq().unwrap().compress(CompressionType::ADAPTIVE($tol)).unwrap();
-//             let rank = lq.rank();
-//             let row_id = lq.row_id().unwrap();
+            let lq = LQData::<$scalar>::new(mat.view()).unwrap().compress(CompressionType::ADAPTIVE($tol)).unwrap();
+            let rank = lq.rank();
+            let two_sided_id = lq.row_id().unwrap().two_sided_id().unwrap();
 
-//             // Compare with original matrix
+            // Compare with original matrix
 
-//             assert!(row_id.to_mat().rel_diff(&mat) < 5.0 * $tol);
+            assert!(<$scalar>::rel_diff_fro(two_sided_id.to_mat().view(), mat.view()) < 5.0 * $tol);
 
-//             // Now compare the individual columns to make sure that the id basis columns
-//             // agree with the corresponding matrix columns.
+            // Now compare the individual columns to make sure that the id basis columns
+            // agree with the corresponding matrix columns.
 
-//             let mat_permuted = mat.apply_permutation(row_id.row_ind.view(), MatrixPermutationMode::ROW);
+            let mat_permuted = mat.apply_permutation(two_sided_id.row_ind.view(), MatrixPermutationMode::ROW).
+                apply_permutation(two_sided_id.col_ind.view(), MatrixPermutationMode::COL);
 
-//             for index in 0..rank {
-//                 assert!(mat_permuted.index_axis(Axis(0), index).rel_diff(&row_id.r.index_axis(Axis(0), index)) < $tol);
+            // Assert that the x matrix in the two sided id is squared with correct dimension.
 
-//             }
+            assert!(two_sided_id.x.nrows() == two_sided_id.x.ncols());
+            assert!(two_sided_id.x.nrows() == rank);
 
-//         }
+            // Now compare with the original matrix.
 
-//             )*
+            for row_index in 0..rank {
+                for col_index in 0..rank {
+                    assert!((two_sided_id.x[[row_index, col_index]] - mat_permuted[[row_index, col_index]]).abs()
+                            < 10.0 * $tol * mat_permuted[[row_index, col_index]].abs())
+                }
+            }
+        }
 
-//         }
-//     }
+            )*
 
-//     id_compression_tests! {
-//         test_id_compression_by_tol_f32_thin: f32, (100, 50), 1E-4,
-//         test_id_compression_by_tol_c32_thin: ndarray_linalg::c32, (100, 50), 1E-4,
-//         test_id_compression_by_tol_f64_thin: f64, (100, 50), 1E-4,
-//         test_id_compression_by_tol_c64_thin: ndarray_linalg::c64, (100, 50), 1E-4,
-//         test_id_compression_by_tol_f32_thick: f32, (50, 100), 1E-4,
-//         test_id_compression_by_tol_c32_thick: ndarray_linalg::c32, (50, 100), 1E-4,
-//         test_id_compression_by_tol_f64_thick: f64, (50, 100), 1E-4,
-//         test_id_compression_by_tol_c64_thick: ndarray_linalg::c64, (50, 100), 1E-4,
-//     }
-// }
+        }
+    }
+
+    id_compression_tests! {
+        test_two_sided_from_row_id_compression_by_tol_f32_thin: f32, (100, 50), 1E-4,
+        test_two_sided_from_row_id_compression_by_tol_c32_thin: ndarray_linalg::c32, (100, 50), 1E-4,
+        test_two_sided_from_row_id_compression_by_tol_f64_thin: f64, (100, 50), 1E-4,
+        test_two_sided_from_row_id_compression_by_tol_c64_thin: ndarray_linalg::c64, (100, 50), 1E-4,
+        test_two_sided_from_row_id_compression_by_tol_f32_thick: f32, (50, 100), 5E-4,
+        test_two_sided_from_row_id_compression_by_tol_c32_thick: ndarray_linalg::c32, (50, 100), 1E-4,
+        test_two_sided_from_row_id_compression_by_tol_f64_thick: f64, (50, 100), 1E-4,
+        test_two_sided_from_row_id_compression_by_tol_c64_thick: ndarray_linalg::c64, (50, 100), 1E-4,
+    }
+}

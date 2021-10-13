@@ -7,10 +7,10 @@ pub mod permutation;
 // pub mod pivoted_qr;
 // pub mod prelude;
 pub mod random_matrix;
-// pub mod random_sampling;
+pub mod random_sampling;
 pub mod row_interp_decomp;
 pub mod svd;
-// pub mod two_sided_interp_decomp;
+pub mod two_sided_interp_decomp;
 
 // pub use rusty_base::Result;
 
