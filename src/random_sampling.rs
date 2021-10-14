@@ -8,7 +8,7 @@ use crate::CompressionType;
 use ndarray::{concatenate, Array1, Array2, ArrayBase, ArrayView1, ArrayView2, Axis, Data, Ix2};
 use num::ToPrimitive;
 use rand::Rng;
-use rusty_base::types::{Result, Scalar};
+use rusty_base::types::{Result, Scalar, c32, c64};
 
 pub trait MatVec {
     type A: Scalar;
@@ -38,22 +38,21 @@ pub trait MatMat: MatVec {
     }
 }
 
-pub trait ConjRowMatVec: MatVec {
-    // If `self` is a linear operator return the product of the conjugate of the
-    // row vector vec with `self`, e.g. `vec.conj().dot(&self)` if `self` is an `ndarray`.
-    fn conj_row_matvec(&self, vec: ArrayView1<Self::A>) -> Array1<Self::A>;
+pub trait ConjMatVec: MatVec {
+    // If `self` is a linear operator return the product of the conjugate of `self`
+    // with a vector.
+    fn conj_matvec(&self, vec: ArrayView1<Self::A>) -> Array1<Self::A>;
 }
 
-pub trait ConjRowMatMat: MatMat + ConjRowMatVec {
-    // Return the product of the complex conjugate transpose of mat from the left
-    // with `self`, e.g. `mat.t().conj().dot(&self)` if  `self` is an `ndarray`.
-    fn conj_row_matmat(&self, mat: ArrayView2<Self::A>) -> Array2<Self::A> {
-        let mut output = Array2::<Self::A>::zeros((mat.nrows(), self.ncols()));
+pub trait ConjMatMat: MatMat + ConjMatVec {
+    // Return the product of the complex conjugate of `self` with a given matrix.
+    fn conj_matmat(&self, mat: ArrayView2<Self::A>) -> Array2<Self::A> {
+        let mut output = Array2::<Self::A>::zeros((self.nrows(), mat.ncols()));
 
-        for (index, row) in mat.axis_iter(Axis(0)).enumerate() {
+        for (index, col) in mat.axis_iter(Axis(1)).enumerate() {
             output
-                .index_axis_mut(Axis(0), index)
-                .assign(&self.conj_row_matvec(row));
+                .index_axis_mut(Axis(1), index)
+                .assign(&self.conj_matvec(col));
         }
 
         output
@@ -80,13 +79,13 @@ where
     }
 }
 
-impl<A, S> ConjRowMatVec for ArrayBase<S, Ix2>
+impl<A, S> ConjMatVec for ArrayBase<S, Ix2>
 where
     A: Scalar,
     S: Data<Elem = A>,
 {
-    fn conj_row_matvec(&self, vec: ArrayView1<Self::A>) -> Array1<Self::A> {
-        vec.map(|item| item.conj()).dot(self)
+    fn conj_matvec(&self, vec: ArrayView1<Self::A>) -> Array1<Self::A> {
+        vec.map(|item| item.conj()).dot(self).map(|item|item.conj())
     }
 }
 
@@ -100,13 +99,13 @@ where
     }
 }
 
-impl<A, S> ConjRowMatMat for ArrayBase<S, Ix2>
+impl<A, S> ConjMatMat for ArrayBase<S, Ix2>
 where
     A: Scalar,
     S: Data<Elem = A>,
 {
-    fn conj_row_matmat(&self, mat: ArrayView2<Self::A>) -> Array2<Self::A> {
-        mat.t().map(|item| item.conj()).dot(self)
+    fn conj_matmat(&self, mat: ArrayView2<Self::A>) -> Array2<Self::A> {
+        mat.t().map(|item| item.conj()).dot(self).t().map(|item|item.conj())
     }
 }
 
@@ -127,11 +126,34 @@ pub trait SampleRange<A: Scalar> {
     ) -> Result<Array2<A>>;
 }
 
+pub trait SampleRangePowerIteration<A: Scalar> {
+
+    /// Randomly sample the range of an operator refined through a power iteration
+    /// Return an approximate orthogonal basis of the dominant range.
+    /// # Arguments
+    /// * `op`: The operator for which to sample the range.
+    /// * `k`: The target rank of the basis for the range.
+    /// * `p`: Oversampling parameter. `p` should be chosen small. A typical size
+    ///      is p=5.
+    /// * `it_count`: The number of steps in the power iteration. For `it_count = 0` the
+    ///               routine is identical to `sample_range_by_rank`.
+    fn sample_range_power_iteration<R: Rng>(
+        op: &Self,
+        k: usize,
+        p: usize,
+        it_count: usize,
+        rng: &mut R,
+    ) -> Result<Array2<A>>;
+
+
+
+}
+
 macro_rules! sample_range_impl {
 
     ($scalar:ty) => {
 
-        impl<Op: MatMat<A = f64>> SampleRange<$scalar> for Op {
+        impl<Op: MatMat<A = $scalar>> SampleRange<$scalar> for Op {
             fn sample_range_by_rank<R: Rng>(
                 op: &Self,
                 k: usize,
@@ -143,7 +165,7 @@ macro_rules! sample_range_impl {
                 let omega = <$scalar>::random_gaussian((m, k + p), rng);
                 let basis = op.matmat(omega.view());
         
-                let qr = QRData::<f64>::new(basis.view())?.compress(CompressionType::RANK(k))?;
+                let qr = QRData::<$scalar>::new(basis.view())?.compress(CompressionType::RANK(k))?;
         
                 Ok(qr.get_q().to_owned())
             }
@@ -153,46 +175,57 @@ macro_rules! sample_range_impl {
     }
 }
 
-impl<Op: MatMat<A = f64>> SampleRange<f64> for Op {
-    fn sample_range_by_rank<R: Rng>(
-        op: &Self,
-        k: usize,
-        p: usize,
-        rng: &mut R,
-    ) -> Result<Array2<f64>> {
-        let m = op.ncols();
+sample_range_impl!(f32);
+sample_range_impl!(f64);
+sample_range_impl!(c32);
+sample_range_impl!(c64);
 
-        let omega = f64::random_gaussian((m, k + p), rng);
-        let basis = op.matmat(omega.view());
+macro_rules! sample_range_power_impl {
 
-        let qr = QRData::<f64>::new(basis.view())?.compress(CompressionType::RANK(k))?;
+    ($scalar:ty) => {
 
-        Ok(qr.get_q().to_owned())
+        impl<Op: ConjMatMat<A = $scalar>> SampleRangePowerIteration<$scalar> for Op {
+            fn sample_range_power_iteration<R: Rng>(
+                op: &Op,
+                k: usize,
+                p: usize,
+                it_count: usize,
+                rng: &mut R,
+            ) -> Result<Array2<$scalar>> {
+                let m = op.ncols();
+
+                let omega = <$scalar>::random_gaussian((m, k + p), rng);
+                let op_omega = op.matmat(omega.view());
+                let mut res = op_omega.clone();
+
+                for index in 0..it_count {
+                    let qr = QRData::<$scalar>::new(op_omega.view())?;
+                    let q = qr.get_q();
+
+                    let qr = QRData::<$scalar>::new(op.conj_matmat(q).view())?;
+                    let w= qr.get_q();
+                    let op_omega = op.matmat(w);
+                    if index == it_count - 1 {
+                        res.assign(&op_omega);
+                    }
+                }
+
+                let compressed = QRData::<$scalar>::new(res.view())?
+                    .compress(CompressionType::RANK(k))?;
+
+                Ok(compressed.get_q().to_owned())
+            }
+}
+        
+
     }
 }
 
-// / Randomly sample the range of an operator.
-// / Return an approximate orthogonal basis of the dominant range.
-// / # Arguments
-// / * `op`: The operator for which to sample the range.
-// / * `k`: The target rank of the basis for the range.
-// / * `p`: Oversampling parameter. `p` should be chosen small. A typical size
-// /      is p=5.
-// / * `rng`: The random number generator.
-// pub fn sample_range_by_rank<Op: MatMat, R: Rng>(
-//     op: &Op,
-//     k: usize,
-//     p: usize,
-//     rng: &mut R,
-// ) -> Result<Array2<Op::A>> {
-//     let m = op.ncols();
+sample_range_power_impl!(f32);
+sample_range_power_impl!(f64);
+sample_range_power_impl!(c32);
+sample_range_power_impl!(c64);
 
-//     let omega = <Op::A as Scalar>::random_gaussian((m, k + p), rng);
-
-//     let qr = QRData::<Op::A>::new(op.matmat(omega.view()))?.compress(CompressionType::RANK(k))?;
-
-//     Ok(qr.get_q())
-// }
 
 // // Randomly sample the range of an operator refined through a power iteration
 // // Return an approximate orthogonal basis of the dominant range.
