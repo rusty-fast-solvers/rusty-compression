@@ -2,7 +2,7 @@
 
 use crate::helpers::Apply;
 use crate::two_sided_interp_decomp::TwoSidedIDData;
-use crate::qr::{QRData, QR};
+use crate::qr::{QR, QRTraits};
 use crate::col_interp_decomp::ColumnID;
 use ndarray::{
     Array1, Array2, ArrayBase, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2, Data, Ix1, Ix2,
@@ -78,7 +78,7 @@ macro_rules! impl_row_id {
             }
 
             fn two_sided_id(&self) -> Result<TwoSidedIDData<Self::A>> {
-                let col_id = QRData::<$scalar>::new(self.r.view())?.column_id()?;
+                let col_id = QR::<$scalar>::compute_from(self.r.view())?.column_id()?;
                 Ok(TwoSidedIDData {
                     c: self.x.to_owned(),
                     x: col_id.get_c().into_owned(),
@@ -126,7 +126,7 @@ mod tests {
     use crate::permutation::ApplyPermutationToMatrix;
     use crate::CompressionType;
     use crate::permutation::MatrixPermutationMode;
-    use crate::qr::{LQ, LQData};
+    use crate::qr::{LQTraits, LQ};
     use crate::row_interp_decomp::RowID;
     use crate::two_sided_interp_decomp::TwoSidedID;
     use crate::random_matrix::RandomMatrix;
@@ -149,7 +149,7 @@ mod tests {
             let mut rng = rand::thread_rng();
             let mat = <$scalar>::random_approximate_low_rank_matrix((m, n), sigma_max, sigma_min, &mut rng);
 
-            let lq = LQData::<$scalar>::new(mat.view()).unwrap().compress(CompressionType::ADAPTIVE($tol)).unwrap();
+            let lq = LQ::<$scalar>::compute_from(mat.view()).unwrap().compress(CompressionType::ADAPTIVE($tol)).unwrap();
             let rank = lq.rank();
             let two_sided_id = lq.row_id().unwrap().two_sided_id().unwrap();
 

@@ -1,9 +1,7 @@
-// Adaptive sampling of a low-rank matrix.
+//! Adaptive sampling of a low-rank matrix.
 
 // use ndarray::s;
 // use ndarray_linalg::OperationNorm;
-// use plotters::prelude::*;
-// use rusty_compression::prelude::*;
 
 pub fn main() {}
 

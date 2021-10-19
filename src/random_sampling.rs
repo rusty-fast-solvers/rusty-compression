@@ -1,14 +1,14 @@
 //! Random sampling of matrices
 
-use crate::compute_svd::ComputeSVD;
-use crate::qr::{QRData, QR};
+use crate::qr::{QRTraits, QR};
 use crate::random_matrix::RandomMatrix;
-use crate::svd::SVD;
+use crate::svd::{SVD, SVDTraits};
 use crate::CompressionType;
 use ndarray::{concatenate, Array1, Array2, ArrayBase, ArrayView1, ArrayView2, Axis, Data, Ix2};
+use ndarray_linalg::Norm;
 use num::ToPrimitive;
 use rand::Rng;
-use rusty_base::types::{Result, Scalar, c32, c64};
+use rusty_base::types::{c32, c64, Result, Scalar};
 
 pub trait MatVec {
     type A: Scalar;
@@ -85,7 +85,9 @@ where
     S: Data<Elem = A>,
 {
     fn conj_matvec(&self, vec: ArrayView1<Self::A>) -> Array1<Self::A> {
-        vec.map(|item| item.conj()).dot(self).map(|item|item.conj())
+        vec.map(|item| item.conj())
+            .dot(self)
+            .map(|item| item.conj())
     }
 }
 
@@ -105,7 +107,11 @@ where
     S: Data<Elem = A>,
 {
     fn conj_matmat(&self, mat: ArrayView2<Self::A>) -> Array2<Self::A> {
-        mat.t().map(|item| item.conj()).dot(self).t().map(|item|item.conj())
+        mat.t()
+            .map(|item| item.conj())
+            .dot(self)
+            .t()
+            .map(|item| item.conj())
     }
 }
 
@@ -127,7 +133,6 @@ pub trait SampleRange<A: Scalar> {
 }
 
 pub trait SampleRangePowerIteration<A: Scalar> {
-
     /// Randomly sample the range of an operator refined through a power iteration
     /// Return an approximate orthogonal basis of the dominant range.
     /// # Arguments
@@ -144,15 +149,10 @@ pub trait SampleRangePowerIteration<A: Scalar> {
         it_count: usize,
         rng: &mut R,
     ) -> Result<Array2<A>>;
-
-
-
 }
 
 macro_rules! sample_range_impl {
-
     ($scalar:ty) => {
-
         impl<Op: MatMat<A = $scalar>> SampleRange<$scalar> for Op {
             fn sample_range_by_rank<R: Rng>(
                 op: &Self,
@@ -161,18 +161,17 @@ macro_rules! sample_range_impl {
                 rng: &mut R,
             ) -> Result<Array2<$scalar>> {
                 let m = op.ncols();
-        
+
                 let omega = <$scalar>::random_gaussian((m, k + p), rng);
                 let basis = op.matmat(omega.view());
-        
-                let qr = QRData::<$scalar>::new(basis.view())?.compress(CompressionType::RANK(k))?;
-        
+
+                let qr = QR::<$scalar>::compute_from(basis.view())?
+                    .compress(CompressionType::RANK(k))?;
+
                 Ok(qr.get_q().to_owned())
             }
         }
-        
-
-    }
+    };
 }
 
 sample_range_impl!(f32);
@@ -181,9 +180,7 @@ sample_range_impl!(c32);
 sample_range_impl!(c64);
 
 macro_rules! sample_range_power_impl {
-
     ($scalar:ty) => {
-
         impl<Op: ConjMatMat<A = $scalar>> SampleRangePowerIteration<$scalar> for Op {
             fn sample_range_power_iteration<R: Rng>(
                 op: &Op,
@@ -199,26 +196,24 @@ macro_rules! sample_range_power_impl {
                 let mut res = op_omega.clone();
 
                 for index in 0..it_count {
-                    let qr = QRData::<$scalar>::new(op_omega.view())?;
+                    let qr = QR::<$scalar>::compute_from(op_omega.view())?;
                     let q = qr.get_q();
 
-                    let qr = QRData::<$scalar>::new(op.conj_matmat(q).view())?;
-                    let w= qr.get_q();
+                    let qr = QR::<$scalar>::compute_from(op.conj_matmat(q).view())?;
+                    let w = qr.get_q();
                     let op_omega = op.matmat(w);
                     if index == it_count - 1 {
                         res.assign(&op_omega);
                     }
                 }
 
-                let compressed = QRData::<$scalar>::new(res.view())?
-                    .compress(CompressionType::RANK(k))?;
+                let compressed =
+                    QR::<$scalar>::compute_from(res.view())?.compress(CompressionType::RANK(k))?;
 
                 Ok(compressed.get_q().to_owned())
             }
-}
-        
-
-    }
+        }
+    };
 }
 
 sample_range_power_impl!(f32);
@@ -226,60 +221,181 @@ sample_range_power_impl!(f64);
 sample_range_power_impl!(c32);
 sample_range_power_impl!(c64);
 
+pub trait MaxColNorm<A: Scalar> {
+    // For a given matrix return the maximum column norm.
+    fn max_col_norm(&self) -> A::Real;
+}
 
-// // Randomly sample the range of an operator refined through a power iteration
-// // Return an approximate orthogonal basis of the dominant range.
-// // # Arguments
-// // * `op`: The operator for which to sample the range.
-// // * `k`: The target rank of the basis for the range.
-// // * `p`: Oversampling parameter. `p` should be chosen small. A typical size
-// //      is p=5.
-// // * `it_count`: The number of steps in the power iteration. For `it_count = 0` the
-// //               routine is identical to `sample_range_by_rank`.
-// pub fn sample_range_by_rank_power_iteration<Op: ConjRowMatMat, R: Rng>(
-//     op: &Op,
-//     k: usize,
-//     p: usize,
-//     it_count: usize,
-//     rng: &mut R,
-// ) -> Result<Array2<Op::A>> {
-//     let m = op.ncols();
+macro_rules! impl_max_col_norm {
+    ($scalar:ty) => {
+        impl<S: Data<Elem = $scalar>> MaxColNorm<$scalar> for ArrayBase<S, Ix2> {
+            // For a given matrix return the maximum column norm.
+            fn max_col_norm(&self) -> <$scalar as Scalar>::Real {
+                let mut max_val = num::zero::<<$scalar as Scalar>::Real>();
 
-//     let omega = Op::A::random_gaussian((m, k + p), rng);
-//     let op_omega = op.matmat(omega.view());
-//     let mut res = op_omega.clone();
+                for col in self.axis_iter(Axis(1)) {
+                    max_val = num::Float::max(max_val, col.norm_l2());
+                }
+                max_val
+            }
+        }
+    };
+}
 
-//     for index in 0..it_count {
-//         let (q, _) = op_omega.qr().unwrap();
-//         let (w, _) = op
-//             .conj_row_matmat(q.view())
-//             .t()
-//             .map(|item| item.conj())
-//             .qr()
-//             .unwrap();
-//         let op_omega = op.matmat(w.view());
-//         if index == it_count - 1 {
-//             res.assign(&op_omega);
-//         }
-//     }
+impl_max_col_norm!(f32);
+impl_max_col_norm!(f64);
+impl_max_col_norm!(c32);
+impl_max_col_norm!(c64);
 
-//     let qr = res
-//         .matmat(omega.view())
-//         .pivoted_qr()?
-//         .compress(CompressionType::RANK(k))?;
+pub trait AdaptiveSampling<A: Scalar> {
+    // Adaptively randomly sample the range of an operator up to a given tolerance.
+    // # Arguments
+    // * `op`: The operator for which to sample the range.
+    // * `rel_tol`: The relative error tolerance. The error is checked probabilistically.
+    // * `sample_size`: Number of samples drawn together in each iteration.
+    // * `rng`: The random number generator.
+    //
+    // Returns a tuple (q, residuals), where `q` is an ndarray containing the orthogonalized columns of
+    // the range, and `residuals` is a vector of tuples of the form `(rank, rel_res)`, where `rel_res`
+    // is the estimated relative residual for the first `rank` columns of `q`.
+    fn sample_range_adaptive<R: Rng>(
+        &self,
+        rel_tol: f64,
+        sample_size: usize,
+        rng: &mut R,
+    ) -> Result<(Array2<A>, Vec<(usize, f64)>)>;
 
-//     Ok(qr.q)
-// }
+    // Compute a QR decomposition via adaptive random range sampling.
+    // # Arguments
+    // * `op`: The operator for which to compute the QR decomposition.
+    // * `rel_tol`: The relative error tolerance. The error is checked probabilistically.
+    // * `sample_size` Number of samples drawn together in each iteration.
+    // * `rng`: The random number generator.
+    fn randomized_adaptive_qr<R: Rng>(
+        &self,
+        rel_tol: f64,
+        sample_size: usize,
+        rng: &mut R,
+    ) -> Result<QR<A>>;
 
-// // For a given matrix return the maximum column norm.
-// fn max_col_norm<A: Scalar + Lapack, S: Data<Elem = A>>(mat: &ArrayBase<S, Ix2>) -> A::Real {
-//     let mut max_val = num::zero::<A::Real>();
+    // Compute a SVD decomposition via adaptive random range sampling.
+    // # Arguments
+    // * `op`: The operator for which to compute the QR decomposition.
+    // * `rel_tol`: The relative error tolerance. The error is checked probabilistically.
+    // * `sample_size` Number of samples drawn together in each iteration.
+    // * `rng`: The random number generator.
+    fn randomized_adaptive_svd<R: Rng>(
+        &self,
+        rel_tol: f64,
+        sample_size: usize,
+        rng: &mut R,
+    ) -> Result<SVD<A>>;
+}
 
-//     for col in mat.axis_iter(Axis(1)) {
-//         max_val = num::Float::max(max_val, col.norm_l2());
-//     }
-//     max_val
-// }
+macro_rules! adaptive_sampling_impl {
+    ($scalar:ty) => {
+        impl<Op: ConjMatMat<A = $scalar>> AdaptiveSampling<$scalar> for Op {
+            fn sample_range_adaptive<R: Rng>(
+                &self,
+                rel_tol: f64,
+                sample_size: usize,
+                rng: &mut R,
+            ) -> Result<(Array2<$scalar>, Vec<(usize, f64)>)> {
+                // This is a sampling factor. See Section 4.3 in Halko, Martinsson, Tropp,
+                // Finding Structure with Randomness, SIAM Review.
+                let tol_factor = num::cast::<f64, <$scalar as Scalar>::Real>(
+                    10.0 * <f64 as num::traits::FloatConst>::FRAC_2_PI().sqrt(),
+                )
+                .unwrap();
+
+                let m = self.ncols();
+                let rel_tol = num::cast::<f64, <$scalar as Scalar>::Real>(rel_tol).unwrap();
+                let omega = <$scalar>::random_gaussian((m, sample_size), rng);
+                let mut op_omega = self.matmat(omega.view());
+                // Randomized estimate of the original operator norm.
+                let operator_norm = op_omega.max_col_norm() * tol_factor;
+                let mut max_norm = operator_norm;
+                let mut q = Array2::<$scalar>::zeros((self.nrows(), 0));
+                let mut b = Array2::<$scalar>::zeros((0, self.ncols()));
+
+                let mut residuals = Vec::<(usize, f64)>::new();
+
+                while max_norm / operator_norm >= rel_tol {
+                    // Orthogonalize against existing basis
+                    if q.ncols() > 0 {
+                        op_omega -= &q.dot(&q.t().map(|item| item.conj()).dot(&op_omega));
+                    }
+                    // Now do the QR of the vectors
+                    let qr = QR::<$scalar>::compute_from(op_omega.view())?;
+                    // Extend the b matrix
+                    b = concatenate![
+                        Axis(0),
+                        b,
+                        self.conj_matmat(qr.get_q()).t().map(|item| item.conj())
+                    ];
+                    // Extend the Q matrix
+                    q = concatenate![Axis(1), q, qr.get_q()];
+
+                    // Now compute new vectors
+                    let omega = <$scalar>::random_gaussian((m, sample_size), rng);
+                    op_omega = self.matmat(omega.view()) - q.dot(&b.dot(&omega));
+
+                    // Update the error tolerance
+                    max_norm = op_omega.max_col_norm() * tol_factor;
+                    residuals.push((q.ncols(), (max_norm / operator_norm).to_f64().unwrap()));
+                }
+
+                Ok((q, residuals))
+            }
+            fn randomized_adaptive_qr<R: Rng>(
+                &self,
+                rel_tol: f64,
+                sample_size: usize,
+                rng: &mut R,
+            ) -> Result<QR<$scalar>> {
+                let (q, _) = self.sample_range_adaptive(rel_tol, sample_size, rng)?;
+
+                let b = self.conj_matmat(q.view()).t().map(|item| item.conj());
+                let qr = QR::<$scalar>::compute_from(b.view())?;
+
+                Ok(QR {
+                    q: b.dot(&qr.get_q()),
+                    r: qr.get_r().into_owned(),
+                    ind: qr.get_ind().into_owned(),
+                })
+            }
+
+            // Compute a SVD decomposition via adaptive random range sampling.
+            // # Arguments
+            // * `op`: The operator for which to compute the QR decomposition.
+            // * `rel_tol`: The relative error tolerance. The error is checked probabilistically.
+            // * `sample_size` Number of samples drawn together in each iteration.
+            // * `rng`: The random number generator.
+            fn randomized_adaptive_svd<R: Rng>(
+                &self,
+                rel_tol: f64,
+                sample_size: usize,
+                rng: &mut R,
+            ) -> Result<SVD<$scalar>> {
+                let (q, _) = self.sample_range_adaptive(rel_tol, sample_size, rng)?;
+
+                let b = self.conj_matmat(q.view()).t().map(|item| item.conj());
+                let svd = SVD::<$scalar>::compute_from(b.view())?;
+
+                Ok(SVD {
+                    u: b.dot(&svd.u),
+                    s: svd.get_s().into_owned(),
+                    vt: svd.get_vt().into_owned(),
+                })
+            }
+        }
+    };
+}
+
+adaptive_sampling_impl!(f32);
+adaptive_sampling_impl!(c64);
+adaptive_sampling_impl!(f64);
+adaptive_sampling_impl!(c32);
 
 // // Adaptively randomly sample the range of an operator up to a given tolerance.
 // // # Arguments

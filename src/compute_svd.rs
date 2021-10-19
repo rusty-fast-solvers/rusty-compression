@@ -1,6 +1,6 @@
 //! A simple trait to wrap SVD Computation.
 
-use crate::svd::SVDData;
+use crate::svd::SVD;
 use ndarray::ArrayView2;
 use ndarray_linalg::{SVDDCInto, UVTFlag};
 use rusty_base::types::{c32, c64, Result, Scalar};
@@ -8,14 +8,14 @@ use rusty_base::types::{c32, c64, Result, Scalar};
 pub(crate) trait ComputeSVD {
     type A: Scalar;
 
-    fn compute_svd(arr: ArrayView2<Self::A>) -> Result<SVDData<Self::A>>;
+    fn compute_svd(arr: ArrayView2<Self::A>) -> Result<SVD<Self::A>>;
 }
 
 macro_rules! compute_svd_impl {
     ($scalar:ty) => {
         impl ComputeSVD for $scalar {
             type A = $scalar;
-            fn compute_svd(arr: ArrayView2<Self::A>) -> Result<SVDData<Self::A>> {
+            fn compute_svd(arr: ArrayView2<Self::A>) -> Result<SVD<Self::A>> {
                 let result = arr.to_owned().svddc_into(UVTFlag::Some);
 
                 let (u, s, vt) = match result {
@@ -23,7 +23,7 @@ macro_rules! compute_svd_impl {
                     Err(_) => return Err("SVD Computation failed."),
                 };
 
-                Ok(SVDData { u, s, vt })
+                Ok(SVD { u, s, vt })
             }
         }
     };

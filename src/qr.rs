@@ -10,7 +10,7 @@ use ndarray_linalg::{Diag, SolveTriangular, UPLO};
 use num::ToPrimitive;
 use rusty_base::types::{c32, c64, Result, Scalar};
 
-pub struct QRData<A: Scalar> {
+pub struct QR<A: Scalar> {
     /// The Q matrix from the QR Decomposition
     pub q: Array2<A>,
     /// The R matrix from the QR Decomposition
@@ -21,7 +21,7 @@ pub struct QRData<A: Scalar> {
     pub ind: Array1<usize>,
 }
 
-pub struct LQData<A: Scalar> {
+pub struct LQ<A: Scalar> {
     /// The Q matrix from the LQ Decomposition
     pub l: Array2<A>,
     /// The Q matrix from the LQ Decomposition
@@ -32,7 +32,7 @@ pub struct LQData<A: Scalar> {
     pub ind: Array1<usize>,
 }
 
-pub trait LQ {
+pub trait LQTraits {
     type A: Scalar;
 
     fn nrows(&self) -> usize {
@@ -50,7 +50,7 @@ pub trait LQ {
             .dot(&self.get_q())
     }
 
-    fn compress_lq_rank(&self, mut max_rank: usize) -> Result<LQData<Self::A>> {
+    fn compress_lq_rank(&self, mut max_rank: usize) -> Result<LQ<Self::A>> {
         let (l, q, ind) = (self.get_l(), self.get_q(), self.get_ind());
 
         if max_rank > q.nrows() {
@@ -60,14 +60,14 @@ pub trait LQ {
         let q = q.slice(s![0..max_rank, ..]);
         let l = l.slice(s![.., 0..max_rank]);
 
-        Ok(LQData {
+        Ok(LQ {
             l: l.into_owned(),
             q: q.into_owned(),
             ind: ind.into_owned(),
         })
     }
 
-    fn compress_lq_tolerance(&self, tol: f64) -> Result<LQData<Self::A>> {
+    fn compress_lq_tolerance(&self, tol: f64) -> Result<LQ<Self::A>> {
         assert!((tol < 1.0) && (0.0 <= tol), "Require 0 <= tol < 1.0");
 
         let pos = self
@@ -82,7 +82,7 @@ pub trait LQ {
         }
     }
 
-    fn compress(&self, compression_type: CompressionType) -> Result<LQData<Self::A>> {
+    fn compress(&self, compression_type: CompressionType) -> Result<LQ<Self::A>> {
         match compression_type {
             CompressionType::ADAPTIVE(tol) => self.compress_lq_tolerance(tol),
             CompressionType::RANK(rank) => self.compress_lq_rank(rank),
@@ -97,11 +97,11 @@ pub trait LQ {
     fn get_l_mut(&mut self) -> ArrayViewMut2<Self::A>;
     fn get_ind_mut(&mut self) -> ArrayViewMut1<usize>;
 
-    fn new(arr: ArrayView2<Self::A>) -> Result<LQData<Self::A>>;
+    fn compute_from(arr: ArrayView2<Self::A>) -> Result<LQ<Self::A>>;
     fn row_id(&self) -> Result<RowIDData<Self::A>>;
 }
 
-pub trait QR {
+pub trait QRTraits {
     type A: Scalar;
 
     fn nrows(&self) -> usize {
@@ -121,7 +121,7 @@ pub trait QR {
         )
     }
 
-    fn compress_qr_rank(&self, mut max_rank: usize) -> Result<QRData<Self::A>> {
+    fn compress_qr_rank(&self, mut max_rank: usize) -> Result<QR<Self::A>> {
         let (q, r, ind) = (self.get_q(), self.get_r(), self.get_ind());
 
         if max_rank > q.ncols() {
@@ -131,14 +131,14 @@ pub trait QR {
         let q = q.slice(s![.., 0..max_rank]);
         let r = r.slice(s![0..max_rank, ..]);
 
-        Ok(QRData {
+        Ok(QR {
             q: q.into_owned(),
             r: r.into_owned(),
             ind: ind.into_owned(),
         })
     }
 
-    fn compress_qr_tolerance(&self, tol: f64) -> Result<QRData<Self::A>> {
+    fn compress_qr_tolerance(&self, tol: f64) -> Result<QR<Self::A>> {
         assert!((tol < 1.0) && (0.0 <= tol), "Require 0 <= tol < 1.0");
 
         let pos = self
@@ -153,7 +153,7 @@ pub trait QR {
         }
     }
 
-    fn compress(&self, compression_type: CompressionType) -> Result<QRData<Self::A>> {
+    fn compress(&self, compression_type: CompressionType) -> Result<QR<Self::A>> {
         match compression_type {
             CompressionType::ADAPTIVE(tol) => self.compress_qr_tolerance(tol),
             CompressionType::RANK(rank) => self.compress_qr_rank(rank),
@@ -162,7 +162,7 @@ pub trait QR {
 
     fn column_id(&self) -> Result<ColumnIDData<Self::A>>;
 
-    fn new(arr: ArrayView2<Self::A>) -> Result<QRData<Self::A>>;
+    fn compute_from(arr: ArrayView2<Self::A>) -> Result<QR<Self::A>>;
 
     fn get_q(&self) -> ArrayView2<Self::A>;
     fn get_r(&self) -> ArrayView2<Self::A>;
@@ -175,7 +175,7 @@ pub trait QR {
 
 macro_rules! qr_data_impl {
     ($scalar:ty) => {
-        impl QR for QRData<$scalar> {
+        impl QRTraits for QR<$scalar> {
             type A = $scalar;
             fn get_q(&self) -> ArrayView2<Self::A> {
                 self.q.view()
@@ -184,7 +184,7 @@ macro_rules! qr_data_impl {
                 self.r.view()
             }
 
-            fn new(arr: ArrayView2<Self::A>) -> Result<QRData<Self::A>> {
+            fn compute_from(arr: ArrayView2<Self::A>) -> Result<QR<Self::A>> {
                 <$scalar>::pivoted_qr(arr)
             }
 
@@ -249,7 +249,7 @@ macro_rules! qr_data_impl {
 
 macro_rules! lq_data_impl {
     ($scalar:ty) => {
-        impl LQ for LQData<$scalar> {
+        impl LQTraits for LQ<$scalar> {
             type A = $scalar;
 
             fn get_q(&self) -> ArrayView2<Self::A> {
@@ -273,10 +273,10 @@ macro_rules! lq_data_impl {
                 self.ind.view_mut()
             }
 
-            fn new(arr: ArrayView2<Self::A>) -> Result<LQData<Self::A>> {
+            fn compute_from(arr: ArrayView2<Self::A>) -> Result<LQ<Self::A>> {
                 let arr_trans = arr.t().map(|val| val.conj());
-                let qr = QRData::<$scalar>::new(arr_trans.view())?;
-                Ok(LQData {
+                let qr = QR::<$scalar>::compute_from(arr_trans.view())?;
+                Ok(LQ {
                     l: qr.r.t().map(|item| item.conj()),
                     q: qr.q.t().map(|item| item.conj()),
                     ind: qr.ind,
@@ -426,7 +426,7 @@ mod tests {
             let mut rng = rand::thread_rng();
             let mat = <$scalar>::random_approximate_low_rank_matrix((m, n), sigma_max, sigma_min, &mut rng);
 
-            let qr = QRData::<$scalar>::new(mat.view()).unwrap().compress(CompressionType::ADAPTIVE($tol)).unwrap();
+            let qr = QR::<$scalar>::compute_from(mat.view()).unwrap().compress(CompressionType::ADAPTIVE($tol)).unwrap();
             let rank = qr.rank();
             let column_id = qr.column_id().unwrap();
 
@@ -467,7 +467,7 @@ mod tests {
             let mut rng = rand::thread_rng();
             let mat = <$scalar>::random_approximate_low_rank_matrix((m, n), sigma_max, sigma_min, &mut rng);
 
-            let lq = LQData::<$scalar>::new(mat.view()).unwrap().compress(CompressionType::ADAPTIVE($tol)).unwrap();
+            let lq = LQ::<$scalar>::compute_from(mat.view()).unwrap().compress(CompressionType::ADAPTIVE($tol)).unwrap();
             let rank = lq.rank();
             let row_id = lq.row_id().unwrap();
 

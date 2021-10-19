@@ -1,13 +1,15 @@
 //! Define an SVD container and conversion tools.
 
-use crate::qr::{QRData, QR};
+use crate::qr::{QR, QRTraits};
 use crate::CompressionType;
 use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2, Axis, Zip};
 use num::ToPrimitive;
 use rusty_base::types::Result;
 use rusty_base::types::{c32, c64, Scalar};
 
-pub struct SVDData<A: Scalar> {
+/// This structure stores the Singular Value Decomposition
+/// of a matrix. 
+pub struct SVD<A: Scalar> {
     /// The U matrix
     pub u: Array2<A>,
     /// The array of singular values
@@ -16,18 +18,26 @@ pub struct SVDData<A: Scalar> {
     pub vt: Array2<A>,
 }
 
-pub trait SVD {
+/// SVD Traits.
+pub trait SVDTraits {
     type A: Scalar;
 
+    /// Return the number of rows of the underlying operator.
     fn nrows(&self) -> usize {
         self.get_u().nrows()
     }
+
+    /// Return the number of columns of the underlying operator.
     fn ncols(&self) -> usize {
         self.get_vt().ncols()
     }
+
+    /// Return the rank of the underlying operator.
     fn rank(&self) -> usize {
         self.get_u().ncols()
     }
+
+    /// Convert to a matrix.
     fn to_mat(&self) -> Array2<Self::A> {
         let mut scaled_vt =
             Array2::<Self::A>::zeros((self.get_vt().nrows(), self.get_vt().ncols()));
@@ -41,16 +51,20 @@ pub trait SVD {
 
         self.get_u().dot(&scaled_vt)
     }
-    fn to_qr(self) -> Result<QRData<Self::A>>;
 
-    fn compress(&self, compression_type: CompressionType) -> Result<SVDData<Self::A>> {
+    /// Convert to a QR Decomposition.
+    fn to_qr(self) -> Result<QR<Self::A>>;
+
+    /// Compress to SVD.
+    fn compress(&self, compression_type: CompressionType) -> Result<SVD<Self::A>> {
         match compression_type {
             CompressionType::ADAPTIVE(tol) => self.compress_svd_tolerance(tol),
             CompressionType::RANK(rank) => self.compress_svd_rank(rank),
         }
     }
 
-    fn compress_svd_rank(&self, mut max_rank: usize) -> Result<SVDData<Self::A>> {
+    /// Compress the SVD by specifying a target rank.
+    fn compress_svd_rank(&self, mut max_rank: usize) -> Result<SVD<Self::A>> {
         let (u, s, vt) = (self.get_u(), self.get_s(), self.get_vt());
 
         if max_rank > s.len() {
@@ -61,14 +75,15 @@ pub trait SVD {
         let s = s.slice(s![0..max_rank]);
         let vt = vt.slice(s![0..max_rank, ..]);
 
-        Ok(SVDData {
+        Ok(SVD {
             u: u.into_owned(),
             s: s.into_owned(),
             vt: vt.into_owned(),
         })
     }
 
-    fn compress_svd_tolerance(&self, tol: f64) -> Result<SVDData<Self::A>> {
+    /// Compress the SVD by specifying a relative tolerance.
+    fn compress_svd_tolerance(&self, tol: f64) -> Result<SVD<Self::A>> {
         assert!((tol < 1.0) && (0.0 <= tol), "Require 0 <= tol < 1.0");
 
         let first_val = self.get_s()[0];
@@ -84,7 +99,7 @@ pub trait SVD {
         }
     }
 
-    fn new(arr: ArrayView2<Self::A>) -> Result<SVDData<Self::A>>;
+    fn compute_from(arr: ArrayView2<Self::A>) -> Result<SVD<Self::A>>;
 
     fn get_u(&self) -> ArrayView2<Self::A>;
     fn get_s(&self) -> ArrayView1<<Self::A as Scalar>::Real>;
@@ -97,7 +112,7 @@ pub trait SVD {
 
 macro_rules! svd_impl {
     ($scalar:ty) => {
-        impl SVD for SVDData<$scalar> {
+        impl SVDTraits for SVD<$scalar> {
             type A = $scalar;
 
             fn get_u(&self) -> ArrayView2<Self::A> {
@@ -121,7 +136,7 @@ macro_rules! svd_impl {
                 self.vt.view_mut()
             }
 
-            fn to_qr(self) -> Result<QRData<Self::A>> {
+            fn to_qr(self) -> Result<QR<Self::A>> {
                 let (u, s, mut vt) = (self.u, self.s, self.vt);
 
                 Zip::from(vt.axis_iter_mut(Axis(0)))
@@ -130,13 +145,13 @@ macro_rules! svd_impl {
                         row.map_inplace(|item| *item *= <Self::A as Scalar>::from_real(s_elem))
                     });
 
-                let mut qr = QRData::<$scalar>::new(vt.view())?;
+                let mut qr = QR::<$scalar>::compute_from(vt.view())?;
                 qr.q = u.dot(&qr.q);
 
                 Ok(qr)
             }
 
-            fn new(arr: ArrayView2<Self::A>) -> Result<SVDData<Self::A>> {
+            fn compute_from(arr: ArrayView2<Self::A>) -> Result<SVD<Self::A>> {
                 use crate::compute_svd::ComputeSVD;
 
                 <$scalar>::compute_svd(arr)
@@ -171,7 +186,7 @@ mod tests {
                 let mut rng = rand::thread_rng();
                 let mat = <$scalar>::random_approximate_low_rank_matrix((m, n), 1.0, 1E-10, &mut rng);
 
-                let svd = SVDData::<$scalar>::new(mat.view()).unwrap();
+                let svd = SVD::<$scalar>::compute_from(mat.view()).unwrap();
 
                 // Perform a QR decomposition and recover the original matrix.
                 let actual = svd.to_qr().unwrap().to_mat();
@@ -203,7 +218,7 @@ mod tests {
             let mut rng = rand::thread_rng();
             let mat = <$scalar>::random_approximate_low_rank_matrix((m, n), sigma_max, sigma_min, &mut rng);
 
-            let svd = SVDData::<$scalar>::new(mat.view()).unwrap().compress(CompressionType::RANK(rank)).unwrap();
+            let svd = SVD::<$scalar>::compute_from(mat.view()).unwrap().compress(CompressionType::RANK(rank)).unwrap();
 
             // Compare with original matrix
 
@@ -234,7 +249,7 @@ mod tests {
             let mut rng = rand::thread_rng();
             let mat = <$scalar>::random_approximate_low_rank_matrix((m, n), sigma_max, sigma_min, &mut rng);
 
-            let svd = SVDData::<$scalar>::new(mat.view()).unwrap().compress(CompressionType::ADAPTIVE($tol)).unwrap();
+            let svd = SVD::<$scalar>::compute_from(mat.view()).unwrap().compress(CompressionType::ADAPTIVE($tol)).unwrap();
 
             // Compare with original matrix
 

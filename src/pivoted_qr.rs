@@ -3,17 +3,17 @@
 //! implemented in ndarray-linalg, making this module necessary.
 
 use crate::pivoted_qr::imp::PivotedQRImpl;
-use crate::qr::{LQData, QRData};
+use crate::qr::{LQ, QR};
 use ndarray::{Array2, ArrayBase, Data, Ix2, ShapeBuilder};
 use rusty_base::types::Result;
 use rusty_base::types::{c32, c64, Scalar};
 
 pub(crate) trait PivotedQR {
     type A: Scalar;
-    fn pivoted_qr<S>(arr: ArrayBase<S, Ix2>) -> Result<QRData<Self::A>>
+    fn pivoted_qr<S>(arr: ArrayBase<S, Ix2>) -> Result<QR<Self::A>>
     where
         S: Data<Elem = Self::A>;
-    fn pivoted_lq<S>(arr: ArrayBase<S, Ix2>) -> Result<LQData<Self::A>>
+    fn pivoted_lq<S>(arr: ArrayBase<S, Ix2>) -> Result<LQ<Self::A>>
     where
         S: Data<Elem = Self::A>;
 }
@@ -22,18 +22,18 @@ macro_rules! pivoted_qr_impl {
     ($scalar:ty) => {
         impl PivotedQR for $scalar {
             type A = Self;
-            fn pivoted_qr<S: Data<Elem = Self::A>>(arr: ArrayBase<S, Ix2>) -> Result<QRData<Self>> {
+            fn pivoted_qr<S: Data<Elem = Self::A>>(arr: ArrayBase<S, Ix2>) -> Result<QR<Self>> {
                 let m = arr.nrows();
                 let n = arr.ncols();
                 let mut mat_fortran = Array2::<Self::A>::zeros((m, n).f());
                 mat_fortran.assign(&arr);
                 <$scalar>::pivoted_qr_impl(mat_fortran)
             }
-            fn pivoted_lq<S: Data<Elem = Self::A>>(arr: ArrayBase<S, Ix2>) -> Result<LQData<Self>> {
+            fn pivoted_lq<S: Data<Elem = Self::A>>(arr: ArrayBase<S, Ix2>) -> Result<LQ<Self>> {
                 let mat_transpose = arr.t().map(|item| item.conj());
                 let qr_data = <$scalar>::pivoted_qr(mat_transpose)?;
 
-                Ok(LQData {
+                Ok(LQ {
                     l: qr_data.r.t().map(|item| item.conj()),
                     q: qr_data.q.t().map(|item| item.conj()),
                     ind: qr_data.ind,
@@ -61,7 +61,7 @@ mod imp {
     where
         Self: Scalar + Lapack,
     {
-        fn pivoted_qr_impl(mat: Array2<Self>) -> Result<super::QRData<Self>>;
+        fn pivoted_qr_impl(mat: Array2<Self>) -> Result<super::QR<Self>>;
         fn pivoted_qr_decomp(
             mat: &mut [Self],
             layout: MatrixLayout,
@@ -80,7 +80,7 @@ mod imp {
             impl PivotedQRImpl for $scalar {
                 fn pivoted_qr_impl(
                     mut mat: Array2<Self>,
-                ) -> Result<super::QRData<$scalar>> {
+                ) -> Result<super::QR<$scalar>> {
                     let m = mat.nrows();
                     let n = mat.ncols();
                     let k = m.min(n);
@@ -115,7 +115,7 @@ mod imp {
 
                     // Finally, return the QR decomposition.
 
-                    Ok(super::QRData{q: q_mat, r:r_mat, ind: jpvt})
+                    Ok(super::QR{q: q_mat, r:r_mat, ind: jpvt})
                 }
 
                 fn pivoted_qr_decomp(
