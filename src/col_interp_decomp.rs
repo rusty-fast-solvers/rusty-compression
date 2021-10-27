@@ -1,21 +1,21 @@
 //! Data structure for Column Interpolative Decomposition
 
 use crate::helpers::Apply;
-use crate::two_sided_interp_decomp::TwoSidedIDData;
+use crate::two_sided_interp_decomp::TwoSidedID;
 use crate::qr::{LQ, LQTraits};
-use crate::row_interp_decomp::RowID;
+use crate::row_interp_decomp::RowIDTraits;
 use ndarray::{
     Array1, Array2, ArrayBase, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2, Data, Ix1, Ix2,
 };
 use rusty_base::types::{c32, c64, Scalar, Result};
 
-pub struct ColumnIDData<A: Scalar> {
+pub struct ColumnID<A: Scalar> {
     c: Array2<A>,
     z: Array2<A>,
     col_ind: Array1<usize>,
 }
 
-pub trait ColumnID {
+pub trait ColumnIDTraits {
     type A: Scalar;
 
     fn nrows(&self) -> usize {
@@ -43,12 +43,12 @@ pub trait ColumnID {
     fn get_col_ind_mut(&mut self) -> ArrayViewMut1<usize>;
 
     fn new(c: Array2<Self::A>, z: Array2<Self::A>, col_ind: Array1<usize>) -> Self;
-    fn two_sided_id(&self) -> Result<TwoSidedIDData<Self::A>>;
+    fn two_sided_id(&self) -> Result<TwoSidedID<Self::A>>;
 }
 
 macro_rules! impl_col_id {
     ($scalar:ty) => {
-        impl ColumnID for ColumnIDData<$scalar> {
+        impl ColumnIDTraits for ColumnID<$scalar> {
             type A = $scalar;
             fn get_c(&self) -> ArrayView2<Self::A> {
                 self.c.view()
@@ -72,11 +72,11 @@ macro_rules! impl_col_id {
             }
 
             fn new(c: Array2<Self::A>, z: Array2<Self::A>, col_ind: Array1<usize>) -> Self {
-                ColumnIDData::<$scalar> { c, z, col_ind }
+                ColumnID::<$scalar> { c, z, col_ind }
             }
-            fn two_sided_id(&self) -> Result<TwoSidedIDData<Self::A>> {
+            fn two_sided_id(&self) -> Result<TwoSidedID<Self::A>> {
                 let row_id = LQ::<$scalar>::compute_from(self.c.view())?.row_id()?;
-                Ok(TwoSidedIDData {
+                Ok(TwoSidedID {
                     c: row_id.get_x().into_owned(),
                     x: row_id.get_r().into_owned(),
                     r: self.get_z().into_owned(),
@@ -92,7 +92,7 @@ macro_rules! impl_col_id {
 
         }
 
-        impl<S> Apply<$scalar, ArrayBase<S, Ix1>> for ColumnIDData<$scalar>
+        impl<S> Apply<$scalar, ArrayBase<S, Ix1>> for ColumnID<$scalar>
         where
             S: Data<Elem = $scalar>,
         {
@@ -103,7 +103,7 @@ macro_rules! impl_col_id {
             }
         }
 
-        impl<S> Apply<$scalar, ArrayBase<S, Ix2>> for ColumnIDData<$scalar>
+        impl<S> Apply<$scalar, ArrayBase<S, Ix2>> for ColumnID<$scalar>
         where
             S: Data<Elem = $scalar>,
         {
@@ -128,8 +128,8 @@ mod tests {
     use crate::CompressionType;
     use crate::permutation::MatrixPermutationMode;
     use crate::qr::{QRTraits, QR};
-    use crate::col_interp_decomp::ColumnID;
-    use crate::two_sided_interp_decomp::TwoSidedID;
+    use crate::col_interp_decomp::ColumnIDTraits;
+    use crate::two_sided_interp_decomp::TwoSidedIDTraits;
     use crate::random_matrix::RandomMatrix;
     use crate::helpers::RelDiff;
     use rusty_base::types::Scalar;

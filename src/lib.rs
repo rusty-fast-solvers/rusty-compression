@@ -21,9 +21,9 @@ pub enum CompressionType {
 
 
 pub use qr::{QR, LQ, QRTraits, LQTraits};
-pub use col_interp_decomp::{ColumnID, ColumnIDData};
-pub use row_interp_decomp::{RowIDData, RowID};
-pub use two_sided_interp_decomp::{TwoSidedIDData, TwoSidedID};
+pub use col_interp_decomp::{ColumnID, ColumnIDTraits};
+pub use row_interp_decomp::{RowID, RowIDTraits};
+pub use two_sided_interp_decomp::{TwoSidedID, TwoSidedIDTraits};
 pub use svd::{SVD, SVDTraits};
 pub use random_matrix::RandomMatrix;
 pub use permutation::*;

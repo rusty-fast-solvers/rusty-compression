@@ -6,7 +6,7 @@ use ndarray::{
 };
 use rusty_base::types::{c32, c64, Scalar};
 
-pub struct TwoSidedIDData<A: Scalar> {
+pub struct TwoSidedID<A: Scalar> {
     pub c: Array2<A>,
     pub x: Array2<A>,
     pub r: Array2<A>,
@@ -14,7 +14,7 @@ pub struct TwoSidedIDData<A: Scalar> {
     pub col_ind: Array1<usize>,
 }
 
-pub trait TwoSidedID {
+pub trait TwoSidedIDTraits {
     type A: Scalar;
 
     fn nrows(&self) -> usize {
@@ -56,7 +56,7 @@ pub trait TwoSidedID {
 
 macro_rules! impl_two_sided_id {
     ($scalar:ty) => {
-        impl TwoSidedID for TwoSidedIDData<$scalar> {
+        impl TwoSidedIDTraits for TwoSidedID<$scalar> {
             type A = $scalar;
 
             fn get_c(&self) -> ArrayView2<Self::A> {
@@ -101,7 +101,7 @@ macro_rules! impl_two_sided_id {
                 col_ind: Array1<usize>,
                 row_ind: Array1<usize>,
             ) -> Self {
-                TwoSidedIDData::<$scalar> {
+                TwoSidedID::<$scalar> {
                     x,
                     r,
                     c,
@@ -110,7 +110,7 @@ macro_rules! impl_two_sided_id {
                 }
             }
         }
-        impl<S> Apply<$scalar, ArrayBase<S, Ix1>> for TwoSidedIDData<$scalar>
+        impl<S> Apply<$scalar, ArrayBase<S, Ix1>> for TwoSidedID<$scalar>
         where
             S: Data<Elem = $scalar>,
         {
@@ -119,7 +119,7 @@ macro_rules! impl_two_sided_id {
                 self.c.dot(&self.x.dot(&self.r.dot(rhs)))
             }
         }
-        impl<S> Apply<$scalar, ArrayBase<S, Ix2>> for TwoSidedIDData<$scalar>
+        impl<S> Apply<$scalar, ArrayBase<S, Ix2>> for TwoSidedID<$scalar>
         where
             S: Data<Elem = $scalar>,
         {

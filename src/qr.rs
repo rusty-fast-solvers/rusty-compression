@@ -1,9 +1,26 @@
-//! A container for QR Decompositions.
+//! Data Structures and traits for QR Decompositions
+//! 
+//! The pivoted QR Decomposition of a matrix $A\in\mathbb{C}^{m\times n}$ is
+//! defined as $AP = QR$, where $P$ is a permutation matrix, $Q\in\mathbb{C}^{m\times k}$
+//! is a matrix with orthogonal columns, satisfying $Q^HQ = I$, and $R\in\mathbb{C}^{k\times n}$
+//! is an upper triangular matrix with diagonal elements $r_{ii}$ satisfying $|r_{11}|\geq |r_{22}|\geq \dots$.
+//! Here $k=\min{m, n}$. The matrix $P$ is defined by an index vector `ind` in such a way that if `ind[j] = k` then
+//! the jth column of $P$ is 1 at the position `P[k, j]` and 0 otherwise. In other words the matrix $P$ permutes the
+//! $k$th column of $A$ to the $j$th column.
+//! 
+//! This module also defines the LQ Decomposition defined as $PA = LQ$ with $L$ a lower triangular matrix. If
+//! $A^H\tilde{P}=\tilde{Q}R$ is the QR decomposition as defined above, then $P = P^T$, $L=R^H$, $Q=\tilde{Q}^H$.
+//! 
+//! Both, the QR and the LQ Decomposition of a matrix can be compressed further, either by specifying a rank or 
+//! by specifying a relative tolerance. Let $AP=QR$. We can compress the QR Decomposition by only keeping the first
+//! $\ell$ columns ($\ell \leq k$) of $Q$ and correspondingly only keeping the first $\ell$ rows of $R$.
+//! We can alternatively determine the $\ell$ by a tolerance `tol` such that only the first $\ell$ rows of $R$ 
+//! are kept that satisfy $|r_{\ell, \ell}| / |r_{1, 1}| \geq tol$.
 
-use crate::col_interp_decomp::{ColumnID, ColumnIDData};
+use crate::col_interp_decomp::{ColumnID, ColumnIDTraits};
 use crate::permutation::{ApplyPermutationToMatrix, MatrixPermutationMode};
 use crate::pivoted_qr::PivotedQR;
-use crate::row_interp_decomp::{RowID, RowIDData};
+use crate::row_interp_decomp::{RowID, RowIDTraits};
 use crate::CompressionType;
 use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2, Axis};
 use ndarray_linalg::{Diag, SolveTriangular, UPLO};
@@ -32,24 +49,33 @@ pub struct LQ<A: Scalar> {
     pub ind: Array1<usize>,
 }
 
+/// Traits for the LQ Decomposition
 pub trait LQTraits {
     type A: Scalar;
 
+    /// Number of Rows
     fn nrows(&self) -> usize {
         self.get_l().nrows()
     }
+
+    /// Number of columns
     fn ncols(&self) -> usize {
         self.get_q().ncols()
     }
+
+    /// Rank of the LQ Decomposition
     fn rank(&self) -> usize {
         self.get_q().nrows()
     }
+
+    /// Convert the LQ Decomposition to a matrix
     fn to_mat(&self) -> Array2<Self::A> {
         self.get_l()
             .apply_permutation(self.get_ind(), MatrixPermutationMode::ROWINV)
             .dot(&self.get_q())
     }
 
+    /// Compress by giving a target rank
     fn compress_lq_rank(&self, mut max_rank: usize) -> Result<LQ<Self::A>> {
         let (l, q, ind) = (self.get_l(), self.get_q(), self.get_ind());
 
@@ -67,6 +93,7 @@ pub trait LQTraits {
         })
     }
 
+    /// Compress by specifying a relative tolerance
     fn compress_lq_tolerance(&self, tol: f64) -> Result<LQ<Self::A>> {
         assert!((tol < 1.0) && (0.0 <= tol), "Require 0 <= tol < 1.0");
 
@@ -82,6 +109,7 @@ pub trait LQTraits {
         }
     }
 
+    /// Compress the LQ Decomposition by rank or tolerance
     fn compress(&self, compression_type: CompressionType) -> Result<LQ<Self::A>> {
         match compression_type {
             CompressionType::ADAPTIVE(tol) => self.compress_lq_tolerance(tol),
@@ -89,16 +117,24 @@ pub trait LQTraits {
         }
     }
 
+    /// Return the Q matrix
     fn get_q(&self) -> ArrayView2<Self::A>;
+
+    /// Return the L matrix
     fn get_l(&self) -> ArrayView2<Self::A>;
+
+    /// Return the index vector
     fn get_ind(&self) -> ArrayView1<usize>;
 
     fn get_q_mut(&mut self) -> ArrayViewMut2<Self::A>;
     fn get_l_mut(&mut self) -> ArrayViewMut2<Self::A>;
     fn get_ind_mut(&mut self) -> ArrayViewMut1<usize>;
 
+    /// Compute the LQ Decomposition from a given array
     fn compute_from(arr: ArrayView2<Self::A>) -> Result<LQ<Self::A>>;
-    fn row_id(&self) -> Result<RowIDData<Self::A>>;
+
+    /// Convert a Row-Interpolative Decomposition from the LQ Decomposition
+    fn row_id(&self) -> Result<RowID<Self::A>>;
 }
 
 pub trait QRTraits {
@@ -160,7 +196,7 @@ pub trait QRTraits {
         }
     }
 
-    fn column_id(&self) -> Result<ColumnIDData<Self::A>>;
+    fn column_id(&self) -> Result<ColumnID<Self::A>>;
 
     fn compute_from(arr: ArrayView2<Self::A>) -> Result<QR<Self::A>>;
 
@@ -203,13 +239,13 @@ macro_rules! qr_data_impl {
                 self.ind.view_mut()
             }
 
-            fn column_id(&self) -> Result<ColumnIDData<Self::A>> {
+            fn column_id(&self) -> Result<ColumnID<Self::A>> {
                 let rank = self.rank();
                 let nrcols = self.ncols();
 
                 if rank == nrcols {
                     // Matrix not rank deficient.
-                    Ok(ColumnIDData::<Self::A>::new(
+                    Ok(ColumnID::<Self::A>::new(
                         self.get_q().dot(&self.get_r()),
                         Array2::<Self::A>::eye(rank)
                             .apply_permutation(self.get_ind(), MatrixPermutationMode::COLINV),
@@ -236,7 +272,7 @@ macro_rules! qr_data_impl {
                         );
                     }
 
-                    Ok(ColumnIDData::<Self::A>::new(
+                    Ok(ColumnID::<Self::A>::new(
                         c,
                         z.apply_permutation(self.get_ind(), MatrixPermutationMode::COLINV),
                         self.get_ind().into_owned(),
@@ -282,13 +318,13 @@ macro_rules! lq_data_impl {
                     ind: qr.ind,
                 })
             }
-            fn row_id(&self) -> Result<RowIDData<Self::A>> {
+            fn row_id(&self) -> Result<RowID<Self::A>> {
                 let rank = self.rank();
                 let nrows = self.nrows();
 
                 if rank == nrows {
                     // Matrix not rank deficient.
-                    Ok(RowIDData::<Self::A>::new(
+                    Ok(RowID::<Self::A>::new(
                         Array2::<Self::A>::eye(rank)
                             .apply_permutation(self.ind.view(), MatrixPermutationMode::ROWINV),
                         self.l.dot(&self.q),
@@ -316,7 +352,7 @@ macro_rules! lq_data_impl {
                         );
                     }
 
-                    Ok(RowIDData::<Self::A>::new(
+                    Ok(RowID::<Self::A>::new(
                         x.apply_permutation(self.ind.view(), MatrixPermutationMode::ROWINV),
                         r,
                         self.ind.clone(),
