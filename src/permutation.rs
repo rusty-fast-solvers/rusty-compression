@@ -3,18 +3,28 @@
 use ndarray::{Array1, Array2, ArrayBase, ArrayView1, Axis, Data, Ix1, Ix2};
 use rusty_base::types::Scalar;
 
+/// Definition of matrix permutation Mode
 pub enum MatrixPermutationMode {
+    /// Apply permutation to columns
     COL,
+    /// Apply permutation to rows
     ROW,
+    /// Apply inverse permutation to columns
     COLINV,
+    /// Apply inverse permutation to rows
     ROWINV,
 }
 
+/// Definition of vector permutation mode
 pub enum VectorPermutationMode {
+    /// Inverse permutation
     INV,
+    /// Forward permutation
     NOINV,
 }
 
+/// Compute the inverse of a permutation vector.
+/// If a\[i\] = j then the inverse vector has inv\[j\] = i
 pub fn invert_permutation_vector<S: Data<Elem = usize>>(perm: &ArrayBase<S, Ix1>) -> Array1<usize> {
     let n = perm.len();
 
@@ -33,7 +43,7 @@ pub trait ApplyPermutationToMatrix {
     /// Apply a permutation to rows or columns of a matrix
     ///
     /// # Arguments
-    /// * `index_array` : A permutation array. If index_array[i] = j then after
+    /// * `index_array` : A permutation array. If index_array\[i\] = j then after
     ///                   permutation the ith row/column of the permuted matrix
     ///                   will contain the jth row/column of the original matrix.
     /// * `mode` : The permutation mode. If the permutation mode is `ROW` or `COL` then
@@ -49,6 +59,14 @@ pub trait ApplyPermutationToMatrix {
 pub trait ApplyPermutationToVector {
     type A;
 
+    /// Apply a permutation to a vector
+    ///
+    /// # Arguments
+    /// * `index_array` : A permutation array. If index_array\[i\] = j then after
+    ///                   permutation the ith element of the permuted vector will contain the
+    ///                   jth element of the original vector.
+    /// * `mode` : The permutation mode. If the permutation mode is `INV`, apply the inverse permutation,
+    ///            otherwise the forward permutation.
     fn apply_permutation(
         &self,
         index_array: ArrayView1<usize>,

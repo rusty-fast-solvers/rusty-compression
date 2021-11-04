@@ -1,4 +1,16 @@
 //! Data structure for Row Interpolative Decomposition
+//! 
+//! A row interpolative decomposition of a matrix $A\in\mathbb{C}^{m\times n}$ is
+//! defined as
+//! $$
+//! A\approx XR
+//! $$
+//! with $R\in\mathbb{C}^{k\times n}$ being a matrix whose rows form a subset of the rows 
+//! of $A$, and $X\in\mathbb{R}^{m\times k}$. The rows of $R$ are obtained from the corresponding rows of
+//! $A$ via an index vector row_ind. If row_ind\[i\] = j then the ith row of $R$ is identical to the jth row
+//! of $A$.
+
+
 
 use crate::helpers::Apply;
 use crate::two_sided_interp_decomp::TwoSidedID;
@@ -9,41 +21,69 @@ use ndarray::{
 };
 use rusty_base::types::{c32, c64, Scalar, Result};
 
+/// Store a Row Interpolative Decomposition
 pub struct RowID<A: Scalar> {
+    /// The X matrix of the row interpolative decomposition
     x: Array2<A>,
+    /// The R matrix of the row interpolative decomposition
     r: Array2<A>,
+    /// An index vector. If row_ind\[i\] = j then the ith row of
+    /// R is identical to the jth row of A.
     row_ind: Array1<usize>,
 }
 
+/// Traits defining a row interpolative decomposition
+/// 
+/// A row interpolative decomposition of a matrix $A\in\mathbb{C}^{m\times n}$ is
+// defined as
+// $$
+// A\approx XR
+// $$
+// with $R\in\mathbb{C}^{k\times n}$ being a matrix whose rows form a subset of the rows 
+// of $A$, and $X\in\mathbb{R}^{m\times k}$. The rows of $R$ are obtained from the corresponding rows of
+// $A$ via an index vector row_ind. If row_ind\[i\] = j then the ith row of $R$ is identical to the jth row
+// of $A$.
 pub trait RowIDTraits {
     type A: Scalar;
 
+    /// Number of rows of the underlying operator
     fn nrows(&self) -> usize {
         self.get_x().nrows()
     }
 
+    /// Number of columns of the underlying operator
     fn ncols(&self) -> usize {
         self.get_r().ncols()
     }
 
+    /// Rank of the row interpolative decomposition
     fn rank(&self) -> usize {
         self.get_r().nrows()
     }
 
+    /// Convert to a matrix
     fn to_mat(&self) -> Array2<Self::A> {
         self.get_x().dot(&self.get_r())
     }
 
+    /// Return the X matrix
     fn get_x(&self) -> ArrayView2<Self::A>;
+
+    /// Return the R matrix
     fn get_r(&self) -> ArrayView2<Self::A>;
+
+    /// Return the index vector
     fn get_row_ind(&self) -> ArrayView1<usize>;
 
     fn get_x_mut(&mut self) -> ArrayViewMut2<Self::A>;
     fn get_r_mut(&mut self) -> ArrayViewMut2<Self::A>;
     fn get_row_ind_mut(&mut self) -> ArrayViewMut1<usize>;
 
+    /// Return a row interpolative decomposition from given component matrices $X$ and
+    /// $R$ and index array row_ind.
     fn new(x: Array2<Self::A>, r: Array2<Self::A>, row_ind: Array1<usize>) -> Self;
 
+    /// Convert the row interpolative decomposition into a two sided interpolative decomposition
     fn two_sided_id(&self) -> Result<TwoSidedID<Self::A>>;
 
 }

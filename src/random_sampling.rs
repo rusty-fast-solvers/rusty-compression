@@ -1,4 +1,9 @@
 //! Random sampling of matrices
+//! 
+//! This module defines traits for the randomized sampling of the range of a linear operator
+//! and the associated computation of randomized QR and Singular Value Decompositions.
+//! To use these routines for a custom linear operator simply implement the `MatVec` trait and
+//! if required the `ConjMatVec` trait.
 
 use crate::qr::{QRTraits, QR};
 use crate::random_matrix::RandomMatrix;
@@ -10,6 +15,9 @@ use num::ToPrimitive;
 use rand::Rng;
 use rusty_base::types::{c32, c64, Result, Scalar};
 
+/// Matrix-Vector Product Trait
+/// 
+/// This trait defines an interface for operators that provide matrix-vector products.
 pub trait MatVec {
     type A: Scalar;
 
@@ -23,6 +31,11 @@ pub trait MatVec {
     fn matvec(&self, mat: ArrayView1<Self::A>) -> Array1<Self::A>;
 }
 
+/// Matrix-Matrix Product Trait
+/// 
+/// This trait defines the application of a linear operator $A$ to a matrix X representing multiple columns.
+/// If it is not implemented then a default implementation is used based on the `MatVec` trait applied to the
+/// individual columns of X.
 pub trait MatMat: MatVec {
     // Return the matrix-matrix product of an operator with a matrix.
     fn matmat(&self, mat: ArrayView2<Self::A>) -> Array2<Self::A> {
@@ -38,12 +51,21 @@ pub trait MatMat: MatVec {
     }
 }
 
+/// Trait describing the product of the conjugate adjoint of an operator with a vector
+/// 
+/// In the case that the operator is a matrix then this simply describes the action $A^Hx$,
+/// where $x$ is a vector and $A^H$ the complex conjugate adjoint of $A$.
 pub trait ConjMatVec: MatVec {
     // If `self` is a linear operator return the product of the conjugate of `self`
     // with a vector.
     fn conj_matvec(&self, vec: ArrayView1<Self::A>) -> Array1<Self::A>;
 }
 
+/// Trait describing the action of the conjugate adjoint of an operator with a matrix
+/// 
+/// In the case that the operator is a matrix then this simply describes the action $A^HX$,
+/// where $X$ is another matrix and $A^H$ the complex conjugate adjoint of $A$. If this trait
+/// is not implemented then a default implementation based on the `ConjMatVec` trait is used.
 pub trait ConjMatMat: MatMat + ConjMatVec {
     // Return the product of the complex conjugate of `self` with a given matrix.
     fn conj_matmat(&self, mat: ArrayView2<Self::A>) -> Array2<Self::A> {
@@ -115,6 +137,12 @@ where
     }
 }
 
+/// Randomly sample the range of an operator
+/// 
+/// Let $A\in\mathbb{C}{m\times n}$ be a matrix. To sample the range of rank $k$ one can multiply
+/// $A$ by a Gaussian random matrix $\Omega$ of dimension $n\times k + p$, where $p$ is a small oversampling
+/// parameter. The result of this product is post-processed by a pivoted QR decomposition and the first $k$
+/// columns of the $Q$ matrix in the pivoted QR decomposition returned. 
 pub trait SampleRange<A: Scalar> {
     /// Randomly sample the range of an operator.
     /// Return an approximate orthogonal basis of the dominant range.
@@ -132,6 +160,14 @@ pub trait SampleRange<A: Scalar> {
     ) -> Result<Array2<A>>;
 }
 
+/// Randomly sample the range of an operator through a power iteration
+/// 
+/// Let $A\in\mathbb{C}{m\times n}$ be a matrix. To sample the range of rank $k$ one can multiply
+/// $A$ by a Gaussian random matrix $\Omega$ of dimension $n\times k + p$, where $p$ is a small oversampling
+/// parameter. To improve the accuracy of the range computation this is then `it_count` times multiplied with the
+/// operator $AA^H$. Each intermediate result is QR orthogonalized to stabilise this power iteration.
+/// The result of the power iteration is post-processed by a pivoted QR decomposition and the first $k$
+/// columns of the $Q$ matrix in the pivoted QR decomposition returned. 
 pub trait SampleRangePowerIteration<A: Scalar> {
     /// Randomly sample the range of an operator refined through a power iteration
     /// Return an approximate orthogonal basis of the dominant range.
@@ -221,6 +257,11 @@ sample_range_power_impl!(f64);
 sample_range_power_impl!(c32);
 sample_range_power_impl!(c64);
 
+/// Trait defining the maximum column norm of an operator
+/// 
+/// If $A\in\mathbb{C}^{m\times n}$ the maximum column-norm is
+/// computed by first taking the Euclidian norm of each column and then
+/// returning the maximum of the column norms.
 pub trait MaxColNorm<A: Scalar> {
     // For a given matrix return the maximum column norm.
     fn max_col_norm(&self) -> A::Real;

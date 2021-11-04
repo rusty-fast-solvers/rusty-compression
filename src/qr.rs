@@ -4,8 +4,8 @@
 //! defined as $AP = QR$, where $P$ is a permutation matrix, $Q\in\mathbb{C}^{m\times k}$
 //! is a matrix with orthogonal columns, satisfying $Q^HQ = I$, and $R\in\mathbb{C}^{k\times n}$
 //! is an upper triangular matrix with diagonal elements $r_{ii}$ satisfying $|r_{11}|\geq |r_{22}|\geq \dots$.
-//! Here $k=\min{m, n}$. The matrix $P$ is defined by an index vector `ind` in such a way that if `ind[j] = k` then
-//! the jth column of $P$ is 1 at the position `P[k, j]` and 0 otherwise. In other words the matrix $P$ permutes the
+//! Here $k=\min{m, n}$. The matrix $P$ is defined by an index vector `ind` in such a way that if ind\[j\] = k then
+//! the jth column of $P$ is 1 at the position P\[k, j\] and 0 otherwise. In other words the matrix $P$ permutes the
 //! $k$th column of $A$ to the $j$th column.
 //! 
 //! This module also defines the LQ Decomposition defined as $PA = LQ$ with $L$ a lower triangular matrix. If
@@ -14,7 +14,7 @@
 //! Both, the QR and the LQ Decomposition of a matrix can be compressed further, either by specifying a rank or 
 //! by specifying a relative tolerance. Let $AP=QR$. We can compress the QR Decomposition by only keeping the first
 //! $\ell$ columns ($\ell \leq k$) of $Q$ and correspondingly only keeping the first $\ell$ rows of $R$.
-//! We can alternatively determine the $\ell$ by a tolerance `tol` such that only the first $\ell$ rows of $R$ 
+//! We can alternatively determine the $\ell$ by a tolerance tol such that only the first $\ell$ rows of $R$ 
 //! are kept that satisfy $|r_{\ell, \ell}| / |r_{1, 1}| \geq tol$.
 
 use crate::col_interp_decomp::{ColumnID, ColumnIDTraits};
@@ -32,7 +32,7 @@ pub struct QR<A: Scalar> {
     pub q: Array2<A>,
     /// The R matrix from the QR Decomposition
     pub r: Array2<A>,
-    /// An index array. If ind[j] = k then the
+    /// An index array. If ind\[j\] = k then the
     /// jth column of Q * R is identical to the
     /// kth column of the original matrix A.
     pub ind: Array1<usize>,
@@ -43,7 +43,7 @@ pub struct LQ<A: Scalar> {
     pub l: Array2<A>,
     /// The Q matrix from the LQ Decomposition
     pub q: Array2<A>,
-    /// An index array. If ind[j] = k then the
+    /// An index array. If ind\[j\] = k then the
     /// jth row of L * Q is identical to the
     /// kth row of the original matrix A.
     pub ind: Array1<usize>,
@@ -53,7 +53,7 @@ pub struct LQ<A: Scalar> {
 pub trait LQTraits {
     type A: Scalar;
 
-    /// Number of Rows
+    /// Number of rows
     fn nrows(&self) -> usize {
         self.get_l().nrows()
     }
@@ -63,12 +63,12 @@ pub trait LQTraits {
         self.get_q().ncols()
     }
 
-    /// Rank of the LQ Decomposition
+    /// Rank of the LQ decomposition
     fn rank(&self) -> usize {
         self.get_q().nrows()
     }
 
-    /// Convert the LQ Decomposition to a matrix
+    /// Convert the LQ decomposition to a matrix
     fn to_mat(&self) -> Array2<Self::A> {
         self.get_l()
             .apply_permutation(self.get_ind(), MatrixPermutationMode::ROWINV)
@@ -130,25 +130,32 @@ pub trait LQTraits {
     fn get_l_mut(&mut self) -> ArrayViewMut2<Self::A>;
     fn get_ind_mut(&mut self) -> ArrayViewMut1<usize>;
 
-    /// Compute the LQ Decomposition from a given array
+    /// Compute the LQ decomposition from a given array
     fn compute_from(arr: ArrayView2<Self::A>) -> Result<LQ<Self::A>>;
 
-    /// Convert a Row-Interpolative Decomposition from the LQ Decomposition
+    /// Compute a row interpolative decomposition from the LQ decomposition
     fn row_id(&self) -> Result<RowID<Self::A>>;
 }
 
 pub trait QRTraits {
     type A: Scalar;
 
+    /// Number of rows
     fn nrows(&self) -> usize {
         self.get_q().nrows()
     }
+
+    /// Number of columns
     fn ncols(&self) -> usize {
         self.get_r().ncols()
     }
+
+    /// Rank of the QR Decomposition
     fn rank(&self) -> usize {
         self.get_q().ncols()
     }
+
+    /// Convert the QR decomposition to a matrix
     fn to_mat(&self) -> Array2<Self::A> {
         self.get_q().dot(
             &self
@@ -157,6 +164,7 @@ pub trait QRTraits {
         )
     }
 
+    /// Compress by giving a target rank
     fn compress_qr_rank(&self, mut max_rank: usize) -> Result<QR<Self::A>> {
         let (q, r, ind) = (self.get_q(), self.get_r(), self.get_ind());
 
@@ -174,6 +182,7 @@ pub trait QRTraits {
         })
     }
 
+    /// Compress by specifying a relative tolerance
     fn compress_qr_tolerance(&self, tol: f64) -> Result<QR<Self::A>> {
         assert!((tol < 1.0) && (0.0 <= tol), "Require 0 <= tol < 1.0");
 
@@ -189,6 +198,7 @@ pub trait QRTraits {
         }
     }
 
+    /// Compress the QR decomposition by rank or tolerance
     fn compress(&self, compression_type: CompressionType) -> Result<QR<Self::A>> {
         match compression_type {
             CompressionType::ADAPTIVE(tol) => self.compress_qr_tolerance(tol),
@@ -196,12 +206,20 @@ pub trait QRTraits {
         }
     }
 
+
+    /// Compute a column interpolative decomposition from the QR decomposition
     fn column_id(&self) -> Result<ColumnID<Self::A>>;
 
+    /// Compute the QR decomposition from a given array
     fn compute_from(arr: ArrayView2<Self::A>) -> Result<QR<Self::A>>;
 
+    /// Return the Q matrix
     fn get_q(&self) -> ArrayView2<Self::A>;
+
+    /// Return the R matrix
     fn get_r(&self) -> ArrayView2<Self::A>;
+
+    /// Return the index vector
     fn get_ind(&self) -> ArrayView1<usize>;
 
     fn get_q_mut(&mut self) -> ArrayViewMut2<Self::A>;

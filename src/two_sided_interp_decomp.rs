@@ -1,4 +1,13 @@
-//! Implementation of the interpolative decomposition.
+//! Implementation of the two sided interpolative decomposition
+//! 
+//! The two sided interpolative decomposition of a matrix $A\in\mathbb{C}&{m\times n} is
+//! defined as
+//! $$
+//! A \approx CXR,
+//! $$
+//! where $C\in\mathbb{C}^{m\times k}$, $X\in\mathbb{C}^{k\times k}$, and $R\in\mathbb{C}^{k\times n}$.
+//! The matrix $X$ contains a subset of the entries of $A$, such that A\[row_ind\[:\], col_ind\[:\]\] = X, where
+//! row_ind and col_ind are index vectors.
 
 use crate::helpers::Apply;
 use ndarray::{
@@ -6,37 +15,67 @@ use ndarray::{
 };
 use rusty_base::types::{c32, c64, Scalar};
 
+/// Store a two sided interpolative decomposition
 pub struct TwoSidedID<A: Scalar> {
+    /// The C matrix of the two sided interpolative decomposition
     pub c: Array2<A>,
+    /// The X matrix of the two sided interpolative decomposition
     pub x: Array2<A>,
+    /// The R matrix of the two sided interpolative decomposition
     pub r: Array2<A>,
+    /// The row index vector
     pub row_ind: Array1<usize>,
+    /// The column index vector
     pub col_ind: Array1<usize>,
 }
+
+/// Traits defining a two sided interpolative decomposition
+/// 
+/// defined as
+/// The two sided interpolative decomposition of a matrix $A\in\mathbb{C}&{m\times n} is
+/// $$
+/// A \approx CXR,
+/// $$
+/// where $C\in\mathbb{C}^{m\times k}$, $X\in\mathbb{C}^{k\times k}$, and $R\in\mathbb{C}^{k\times n}$.
+/// The matrix $X$ contains a subset of the entries of $A$, such that A\[row_ind\[:\], col_ind\[:\]\] = X, where
+/// row_ind and col_ind are index vectors.
 
 pub trait TwoSidedIDTraits {
     type A: Scalar;
 
+    /// Number of rows of the underlying operator
     fn nrows(&self) -> usize {
         self.get_c().nrows()
     }
 
+    /// Number of columns of the underlying operator
     fn ncols(&self) -> usize {
         self.get_r().ncols()
     }
 
+    /// Rank of the two sided interpolative decomposition
     fn rank(&self) -> usize {
         self.get_c().ncols()
     }
 
+    /// Convert to a matrix
     fn to_mat(&self) -> Array2<Self::A> {
         self.get_c().dot(&self.get_x().dot(&self.get_r()))
     }
 
+    /// Return the C matrix
     fn get_c(&self) -> ArrayView2<Self::A>;
+
+    /// Return the X matrix
     fn get_x(&self) -> ArrayView2<Self::A>;
+
+    /// Return the R matrix
     fn get_r(&self) -> ArrayView2<Self::A>;
+
+    /// Return the column index vector
     fn get_col_ind(&self) -> ArrayView1<usize>;
+
+    /// Return the row index vector
     fn get_row_ind(&self) -> ArrayView1<usize>;
 
     fn get_c_mut(&mut self) -> ArrayViewMut2<Self::A>;
@@ -45,6 +84,8 @@ pub trait TwoSidedIDTraits {
     fn get_col_ind_mut(&mut self) -> ArrayViewMut1<usize>;
     fn get_row_ind_mut(&mut self) -> ArrayViewMut1<usize>;
 
+    /// Return a two sided interpolative decomposition from the component matrices
+    /// X, R, C, and the column and row index vectors
     fn new(
         x: Array2<Self::A>,
         r: Array2<Self::A>,

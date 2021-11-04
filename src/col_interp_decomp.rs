@@ -1,4 +1,14 @@
-//! Data structure for Column Interpolative Decomposition
+//! Data structures for Column Interpolative Decomposition.
+//! 
+//! A column interpolative decomposition of a matrix $A\in\mathbb{C}^{m\times n}$ is
+//! defined as
+//! $$
+//! A\approx CZ
+//! $$
+//! with $C\in\mathbb{C}^{m\times k}$ being a matrix whose columns form a subset of the columns 
+//! of $A$, and $Z\in\mathbb{R}^{k\times m}$. The columns of $C$ are obtained from the corresponding columns of
+//! $A$ via an index vector col_ind. If col_ind\[i\] = j then the ith column of $C$ is identical to the jth column
+//! of $A$.
 
 use crate::helpers::Apply;
 use crate::two_sided_interp_decomp::TwoSidedID;
@@ -9,40 +19,69 @@ use ndarray::{
 };
 use rusty_base::types::{c32, c64, Scalar, Result};
 
+/// Store a Column Interpolative Decomposition
 pub struct ColumnID<A: Scalar> {
+    /// The C matrix of the column interpolative decomposition
     c: Array2<A>,
+    /// The Z matrix of the column interpolative decomposition
     z: Array2<A>,
+    /// An index vector. If col_ind\[i\] = j then the ith column of
+    /// C is identical to the jth column of A.
     col_ind: Array1<usize>,
 }
 
+/// Traits defining a column interpolative decomposition
+/// 
+// A column interpolative decomposition of a matrix $A\in\mathbb{C}^{m\times n}$ is
+// defined as
+// $$
+// A\approx CZ
+// $$
+// with $C\in\mathbb{C}^{m\times k}$ being a matrix whose columns form a subset of the columns 
+// of $A$, and $Z\in\mathbb{R}^{k\times m}$. The columns of $C$ are obtained from the corresponding columns of
+// $A$ via an index vector col_ind. If col_ind\[i\] = j then the ith column of $C$ is identical to the jth column
+// of $A$.
 pub trait ColumnIDTraits {
     type A: Scalar;
 
+    /// Number of rows of the underlying operator
     fn nrows(&self) -> usize {
         self.get_c().nrows()
     }
 
+    /// Number of columns of the underlying operator
     fn ncols(&self) -> usize {
         self.get_z().ncols()
     }
 
+    /// Rank of the column interpolative decomposition
     fn rank(&self) -> usize {
         self.get_c().ncols()
     }
 
+    /// Convert to a matrix
     fn to_mat(&self) -> Array2<Self::A> {
         self.get_c().dot(&self.get_z())
     }
 
+    /// Return the C matrix
     fn get_c(&self) -> ArrayView2<Self::A>;
+
+    /// Return the Z matrix
     fn get_z(&self) -> ArrayView2<Self::A>;
+
+    /// Return the index vector
     fn get_col_ind(&self) -> ArrayView1<usize>;
 
     fn get_c_mut(&mut self) -> ArrayViewMut2<Self::A>;
     fn get_z_mut(&mut self) -> ArrayViewMut2<Self::A>;
     fn get_col_ind_mut(&mut self) -> ArrayViewMut1<usize>;
 
+    /// Return a column interpolative decomposition from given component matrices $C$ and
+    /// $Z$ and index array col_ind
     fn new(c: Array2<Self::A>, z: Array2<Self::A>, col_ind: Array1<usize>) -> Self;
+
+    /// Convert the column interpolative decomposition into a two sided interpolative decomposition
     fn two_sided_id(&self) -> Result<TwoSidedID<Self::A>>;
 }
 
