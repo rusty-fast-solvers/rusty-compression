@@ -28,3 +28,4 @@ pub use svd::{SVD, SVDTraits};
 pub use random_matrix::RandomMatrix;
 pub use permutation::*;
 pub use helpers::RelDiff;
+pub use random_sampling::*;

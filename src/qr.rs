@@ -1,5 +1,5 @@
 //! Data Structures and traits for QR Decompositions
-//! 
+//!
 //! The pivoted QR Decomposition of a matrix $A\in\mathbb{C}^{m\times n}$ is
 //! defined as $AP = QR$, where $P$ is a permutation matrix, $Q\in\mathbb{C}^{m\times k}$
 //! is a matrix with orthogonal columns, satisfying $Q^HQ = I$, and $R\in\mathbb{C}^{k\times n}$
@@ -7,14 +7,14 @@
 //! Here $k=\min{m, n}$. The matrix $P$ is defined by an index vector `ind` in such a way that if ind\[j\] = k then
 //! the jth column of $P$ is 1 at the position P\[k, j\] and 0 otherwise. In other words the matrix $P$ permutes the
 //! $k$th column of $A$ to the $j$th column.
-//! 
+//!
 //! This module also defines the LQ Decomposition defined as $PA = LQ$ with $L$ a lower triangular matrix. If
 //! $A^H\tilde{P}=\tilde{Q}R$ is the QR decomposition as defined above, then $P = P^T$, $L=R^H$, $Q=\tilde{Q}^H$.
-//! 
-//! Both, the QR and the LQ Decomposition of a matrix can be compressed further, either by specifying a rank or 
+//!
+//! Both, the QR and the LQ Decomposition of a matrix can be compressed further, either by specifying a rank or
 //! by specifying a relative tolerance. Let $AP=QR$. We can compress the QR Decomposition by only keeping the first
 //! $\ell$ columns ($\ell \leq k$) of $Q$ and correspondingly only keeping the first $\ell$ rows of $R$.
-//! We can alternatively determine the $\ell$ by a tolerance tol such that only the first $\ell$ rows of $R$ 
+//! We can alternatively determine the $\ell$ by a tolerance tol such that only the first $\ell$ rows of $R$
 //! are kept that satisfy $|r_{\ell, \ell}| / |r_{1, 1}| \geq tol$.
 
 use crate::col_interp_decomp::{ColumnID, ColumnIDTraits};
@@ -26,6 +26,7 @@ use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut1, ArrayVie
 use ndarray_linalg::{Diag, SolveTriangular, UPLO};
 use num::ToPrimitive;
 use rusty_base::types::{c32, c64, Result, Scalar};
+use rusty_base::ConjMatMat;
 
 pub struct QR<A: Scalar> {
     /// The Q matrix from the QR Decomposition
@@ -206,12 +207,21 @@ pub trait QRTraits {
         }
     }
 
-
     /// Compute a column interpolative decomposition from the QR decomposition
     fn column_id(&self) -> Result<ColumnID<Self::A>>;
 
     /// Compute the QR decomposition from a given array
     fn compute_from(arr: ArrayView2<Self::A>) -> Result<QR<Self::A>>;
+
+    /// Compute a QR decomposition from a range estimate
+    /// # Arguments
+    /// * `range`: A matrix with orthogonal columns that approximates the range
+    ///            of the operator.
+    /// * `op`: The underlying operator.
+    fn compute_from_range_estimate<Op: ConjMatMat<A = Self::A>>(
+        range: ArrayView2<Self::A>,
+        op: &Op,
+    ) -> Result<QR<Self::A>>;
 
     /// Return the Q matrix
     fn get_q(&self) -> ArrayView2<Self::A>;
@@ -296,6 +306,20 @@ macro_rules! qr_data_impl {
                         self.get_ind().into_owned(),
                     ))
                 }
+            }
+
+            fn compute_from_range_estimate<Op: ConjMatMat<A = Self::A>>(
+                range: ArrayView2<Self::A>,
+                op: &Op,
+            ) -> Result<QR<Self::A>> {
+                let b = op.conj_matmat(range.t().map(|item| item.conj()).view());
+                let qr = QR::<$scalar>::compute_from(b.view())?;
+
+                Ok(QR {
+                    q: b.dot(&qr.get_q()),
+                    r: qr.get_r().into_owned(),
+                    ind: qr.get_ind().into_owned(),
+                })
             }
         }
     };

@@ -1,14 +1,14 @@
 //! Define an SVD container and conversion tools.
 
-use crate::qr::{QR, QRTraits};
+use crate::qr::{QRTraits, QR};
 use crate::CompressionType;
 use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2, Axis, Zip};
 use num::ToPrimitive;
 use rusty_base::types::Result;
-use rusty_base::types::{c32, c64, Scalar};
+use rusty_base::types::{c32, c64, ConjMatMat, Scalar};
 
 /// This structure stores the Singular Value Decomposition
-/// of a matrix. 
+/// of a matrix
 pub struct SVD<A: Scalar> {
     /// The U matrix
     pub u: Array2<A>,
@@ -18,21 +18,21 @@ pub struct SVD<A: Scalar> {
     pub vt: Array2<A>,
 }
 
-/// SVD Traits.
+/// SVD Traits
 pub trait SVDTraits {
     type A: Scalar;
 
-    /// Return the number of rows of the underlying operator.
+    /// Return the number of rows of the underlying operator
     fn nrows(&self) -> usize {
         self.get_u().nrows()
     }
 
-    /// Return the number of columns of the underlying operator.
+    /// Return the number of columns of the underlying operator
     fn ncols(&self) -> usize {
         self.get_vt().ncols()
     }
 
-    /// Return the rank of the underlying operator.
+    /// Return the rank of the underlying operator
     fn rank(&self) -> usize {
         self.get_u().ncols()
     }
@@ -101,6 +101,16 @@ pub trait SVDTraits {
 
     fn compute_from(arr: ArrayView2<Self::A>) -> Result<SVD<Self::A>>;
 
+    /// Compute a singular value decomposition from a range estimate
+    /// # Arguments
+    /// * `range`: A matrix with orthogonal columns that approximates the range
+    ///            of the operator.
+    /// * `op`: The underlying operator.
+    fn compute_from_range_estimate<Op: ConjMatMat<A = Self::A>>(
+        range: ArrayView2<Self::A>,
+        op: &Op,
+    ) -> Result<SVD<Self::A>>;
+
     fn get_u(&self) -> ArrayView2<Self::A>;
     fn get_s(&self) -> ArrayView1<<Self::A as Scalar>::Real>;
     fn get_vt(&self) -> ArrayView2<Self::A>;
@@ -155,6 +165,20 @@ macro_rules! svd_impl {
                 use crate::compute_svd::ComputeSVD;
 
                 <$scalar>::compute_svd(arr)
+            }
+
+            fn compute_from_range_estimate<Op: ConjMatMat<A = Self::A>>(
+                range: ArrayView2<Self::A>,
+                op: &Op,
+            ) -> Result<SVD<Self::A>> {
+                let b = op.conj_matmat(range.t().map(|item| item.conj()).view());
+                let svd = SVD::<$scalar>::compute_from(b.view())?;
+
+                Ok(SVD {
+                    u: b.dot(&svd.u),
+                    s: svd.get_s().into_owned(),
+                    vt: svd.get_vt().into_owned(),
+                })
             }
         }
     };
