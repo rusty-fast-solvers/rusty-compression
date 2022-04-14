@@ -10,14 +10,14 @@
 //! $A$ via an index vector col_ind. If col_ind\[i\] = j then the ith column of $C$ is identical to the jth column
 //! of $A$.
 
-use crate::helpers::Apply;
+use crate::types::Apply;
 use crate::two_sided_interp_decomp::TwoSidedID;
 use crate::qr::{LQ, LQTraits};
 use crate::row_interp_decomp::RowIDTraits;
 use ndarray::{
     Array1, Array2, ArrayBase, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2, Data, Ix1, Ix2,
 };
-use rusty_base::types::{c32, c64, Scalar, Result};
+use crate::types::{c32, c64, Scalar, Result};
 
 /// Store a Column Interpolative Decomposition
 pub struct ColumnID<A: Scalar> {
@@ -170,8 +170,8 @@ mod tests {
     use crate::col_interp_decomp::ColumnIDTraits;
     use crate::two_sided_interp_decomp::TwoSidedIDTraits;
     use crate::random_matrix::RandomMatrix;
-    use crate::helpers::RelDiff;
-    use rusty_base::types::Scalar;
+    use crate::types::RelDiff;
+    use crate::types::Scalar;
 
     macro_rules! id_compression_tests {
 

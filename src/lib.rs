@@ -1,6 +1,6 @@
 pub mod col_interp_decomp;
 pub mod compute_svd;
-pub mod helpers;
+pub mod types;
 pub mod permutation;
 
 pub mod random_matrix;
@@ -27,5 +27,9 @@ pub use two_sided_interp_decomp::{TwoSidedID, TwoSidedIDTraits};
 pub use svd::{SVD, SVDTraits};
 pub use random_matrix::RandomMatrix;
 pub use permutation::*;
-pub use helpers::RelDiff;
+pub use types::RelDiff;
 pub use random_sampling::*;
+
+pub use types::{c32, c64, Scalar};
+
+pub use types::Result;

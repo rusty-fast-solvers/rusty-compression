@@ -4,9 +4,9 @@
 
 use crate::pivoted_qr::imp::PivotedQRImpl;
 use crate::qr::{LQ, QR};
+use crate::types::Result;
+use crate::types::{c32, c64, Scalar};
 use ndarray::{Array2, ArrayBase, Data, Ix2, ShapeBuilder};
-use rusty_base::types::Result;
-use rusty_base::types::{c32, c64, Scalar};
 
 pub(crate) trait PivotedQR {
     type A: Scalar;
@@ -50,12 +50,12 @@ pivoted_qr_impl!(c64);
 
 mod imp {
 
+    use crate::types::{Result, RustyCompressionError};
     use lax;
     use ndarray::{s, Array1, Array2};
     use ndarray_linalg::layout::AllocatedArray;
     use ndarray_linalg::{IntoTriangular, Lapack, MatrixLayout, Scalar};
     use num::traits::{ToPrimitive, Zero};
-    use rusty_base::types::Result;
 
     pub trait PivotedQRImpl
     where
@@ -87,14 +87,14 @@ mod imp {
 
                     let layout = match mat.layout() {
                         Ok(layout) => layout,
-                        Err(_) => return Err("Incompatible layout for pivoted QR"),
+                        Err(_) => return Err(RustyCompressionError::LayoutError),
                     };
 
                     let result =
                         Self::pivoted_qr_decomp(mat.as_slice_memory_order_mut().unwrap(), layout);
                     let (mut tau, jpvt) = match result {
                         Ok(res) => res,
-                        Err(_) => return Err("Lapack routien for pivoted QR failed."),
+                        Err(_) => return Err(RustyCompressionError::PivotedQRError),
                     };
 
                     let mut r_mat = Array2::<$scalar>::zeros((k, n));
@@ -107,7 +107,7 @@ mod imp {
                         tau.as_slice_memory_order_mut().unwrap(),
                     ) {
                         Ok(_) => (),
-                        Err(_) => return Err("Computation of Q matrix failed in pivoted QR."),
+                        Err(_) => return Err(RustyCompressionError::PivotedQRError),
                     }
 
                     let mut q_mat = Array2::<$scalar>::zeros((m as usize, k as usize));

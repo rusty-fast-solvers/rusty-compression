@@ -9,11 +9,11 @@
 //! The matrix $X$ contains a subset of the entries of $A$, such that A\[row_ind\[:\], col_ind\[:\]\] = X, where
 //! row_ind and col_ind are index vectors.
 
-use crate::helpers::Apply;
+use crate::types::Apply;
 use ndarray::{
     Array1, Array2, ArrayBase, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2, Data, Ix1, Ix2,
 };
-use rusty_base::types::{c32, c64, Scalar};
+use crate::types::{c32, c64, Scalar};
 
 /// Store a two sided interpolative decomposition
 pub struct TwoSidedID<A: Scalar> {

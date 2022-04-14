@@ -4,8 +4,9 @@ use crate::qr::{QRTraits, QR};
 use crate::CompressionType;
 use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2, Axis, Zip};
 use num::ToPrimitive;
-use rusty_base::types::Result;
-use rusty_base::types::{c32, c64, ConjMatMat, Scalar};
+use crate::types::Result;
+use crate::types::RustyCompressionError;
+use crate::types::{c32,c64, ConjMatMat, Scalar};
 
 /// This structure stores the Singular Value Decomposition
 /// of a matrix
@@ -45,7 +46,7 @@ pub trait SVDTraits {
 
         Zip::from(scaled_vt.axis_iter_mut(Axis(0)))
             .and(self.get_s().view())
-            .apply(|mut row, &s_elem| {
+            .for_each(|mut row, &s_elem| {
                 row.map_inplace(|item| *item *= <Self::A as Scalar>::from_real(s_elem))
             });
 
@@ -95,7 +96,7 @@ pub trait SVDTraits {
 
         match pos {
             Some(index) => self.compress_svd_rank(index),
-            None => Err("Could not compress operator to desired tolerance."),
+            None => Err(RustyCompressionError::CompressionError),
         }
     }
 
@@ -151,7 +152,7 @@ macro_rules! svd_impl {
 
                 Zip::from(vt.axis_iter_mut(Axis(0)))
                     .and(s.view())
-                    .apply(|mut row, &s_elem| {
+                    .for_each(|mut row, &s_elem| {
                         row.map_inplace(|item| *item *= <Self::A as Scalar>::from_real(s_elem))
                     });
 
@@ -193,7 +194,7 @@ svd_impl!(c64);
 mod tests {
 
     use super::*;
-    use crate::helpers::RelDiff;
+    use crate::types::RelDiff;
     use crate::random_matrix::RandomMatrix;
     use crate::CompressionType;
     use ndarray::Axis;

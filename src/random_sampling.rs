@@ -12,7 +12,7 @@ use ndarray::{concatenate, Array2, ArrayBase, Axis, Data, Ix2};
 use ndarray_linalg::Norm;
 use num::ToPrimitive;
 use rand::Rng;
-use rusty_base::types::{c32, c64, Result, Scalar, MatMat, ConjMatMat};
+use crate::types::{c32, c64, Result, Scalar, MatMat, ConjMatMat};
 
 
 /// Randomly sample the range of an operator

@@ -25,8 +25,8 @@ use crate::CompressionType;
 use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2, Axis};
 use ndarray_linalg::{Diag, SolveTriangular, UPLO};
 use num::ToPrimitive;
-use rusty_base::types::{c32, c64, Result, Scalar};
-use rusty_base::ConjMatMat;
+use crate::types::{c32, c64, Result, Scalar};
+use crate::types::{ConjMatMat, RustyCompressionError};
 
 pub struct QR<A: Scalar> {
     /// The Q matrix from the QR Decomposition
@@ -106,7 +106,7 @@ pub trait LQTraits {
 
         match pos {
             Some(index) => self.compress_lq_rank(index),
-            None => Err("Could not compress operator to desired tolerance."),
+            None => Err(RustyCompressionError::CompressionError),
         }
     }
 
@@ -195,7 +195,7 @@ pub trait QRTraits {
 
         match pos {
             Some(index) => self.compress_qr_rank(index),
-            None => Err("Could not compress operator to desired tolerance."),
+            None => Err(RustyCompressionError::CompressionError),
         }
     }
 
@@ -419,7 +419,7 @@ lq_data_impl!(c64);
 mod tests {
 
     use super::*;
-    use crate::helpers::RelDiff;
+    use crate::types::RelDiff;
     use crate::pivoted_qr::PivotedQR;
     use crate::random_matrix::RandomMatrix;
     use ndarray::Axis;

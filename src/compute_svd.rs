@@ -3,7 +3,7 @@
 use crate::svd::SVD;
 use ndarray::ArrayView2;
 use ndarray_linalg::{SVDDCInto, UVTFlag};
-use rusty_base::types::{c32, c64, Result, Scalar};
+use crate::types::{c32, c64, Result, Scalar, RustyCompressionError};
 
 pub(crate) trait ComputeSVD {
     type A: Scalar;
@@ -20,7 +20,7 @@ macro_rules! compute_svd_impl {
 
                 let (u, s, vt) = match result {
                     Ok((u, s, vt)) => (u.unwrap(), s, vt.unwrap()),
-                    Err(_) => return Err("SVD Computation failed."),
+                    Err(err) => return Err(RustyCompressionError::LinalgError(err)),
                 };
 
                 Ok(SVD { u, s, vt })

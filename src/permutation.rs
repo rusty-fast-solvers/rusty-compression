@@ -1,7 +1,7 @@
 //! Traits and functions for permutation vectors.
 
 use ndarray::{Array1, Array2, ArrayBase, ArrayView1, Axis, Data, Ix1, Ix2};
-use rusty_base::types::Scalar;
+use crate::types::Scalar;
 
 /// Definition of matrix permutation Mode
 pub enum MatrixPermutationMode {
