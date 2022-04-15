@@ -9,7 +9,7 @@
 //! $k$th column of $A$ to the $j$th column.
 //!
 //! This module also defines the LQ Decomposition defined as $PA = LQ$ with $L$ a lower triangular matrix. If
-//! $A^H\tilde{P}=\tilde{Q}R$ is the QR decomposition as defined above, then $P = P^T$, $L=R^H$, $Q=\tilde{Q}^H$.
+//! $A^H\tilde{P}=\tilde{Q}R$ is the QR decomposition as defined above, then $P = \tilde{P}^T$, $L=R^H$, $Q=\tilde{Q}^H$.
 //!
 //! Both, the QR and the LQ Decomposition of a matrix can be compressed further, either by specifying a rank or
 //! by specifying a relative tolerance. Let $AP=QR$. We can compress the QR Decomposition by only keeping the first
@@ -312,11 +312,11 @@ macro_rules! qr_data_impl {
                 range: ArrayView2<Self::A>,
                 op: &Op,
             ) -> Result<QR<Self::A>> {
-                let b = op.conj_matmat(range.t().map(|item| item.conj()).view());
+                let b = op.conj_matmat(range).t().map(|item| item.conj());
                 let qr = QR::<$scalar>::compute_from(b.view())?;
 
                 Ok(QR {
-                    q: b.dot(&qr.get_q()),
+                    q: range.dot(&qr.get_q()),
                     r: qr.get_r().into_owned(),
                     ind: qr.get_ind().into_owned(),
                 })

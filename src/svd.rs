@@ -172,11 +172,11 @@ macro_rules! svd_impl {
                 range: ArrayView2<Self::A>,
                 op: &Op,
             ) -> Result<SVD<Self::A>> {
-                let b = op.conj_matmat(range.t().map(|item| item.conj()).view());
+                let b = op.conj_matmat(range).t().map(|item| item.conj());
                 let svd = SVD::<$scalar>::compute_from(b.view())?;
 
                 Ok(SVD {
-                    u: b.dot(&svd.u),
+                    u: range.dot(&svd.u),
                     s: svd.get_s().into_owned(),
                     vt: svd.get_vt().into_owned(),
                 })

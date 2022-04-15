@@ -1,6 +1,6 @@
 //! Implementation of the two sided interpolative decomposition
 //! 
-//! The two sided interpolative decomposition of a matrix $A\in\mathbb{C}&{m\times n} is
+//! The two sided interpolative decomposition of a matrix $A\in\mathbb{C}&{m\times n}$ is
 //! defined as
 //! $$
 //! A \approx CXR,
