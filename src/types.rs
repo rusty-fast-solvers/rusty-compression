@@ -88,7 +88,7 @@ pub trait ConjMatVec: MatVec {
 pub trait ConjMatMat: MatMat + ConjMatVec {
     // Return the product of the complex conjugate of `self` with a given matrix.
     fn conj_matmat(&self, mat: ArrayView2<Self::A>) -> Array2<Self::A> {
-        let mut output = Array2::<Self::A>::zeros((self.nrows(), mat.ncols()));
+        let mut output = Array2::<Self::A>::zeros((self.ncols(), mat.ncols()));
 
         for (index, col) in mat.axis_iter(Axis(1)).enumerate() {
             output
@@ -132,29 +132,32 @@ where
     }
 }
 
-impl<A, S> MatMat for ArrayBase<S, Ix2>
-where
-    A: Scalar,
-    S: Data<Elem = A>,
-{
-    fn matmat(&self, mat: ArrayView2<Self::A>) -> Array2<Self::A> {
-        self.dot(&mat)
-    }
-}
+// impl<A, S> MatMat for ArrayBase<S, Ix2>
+// where
+//     A: Scalar,
+//     S: Data<Elem = A>,
+// {
+//     fn matmat(&self, mat: ArrayView2<Self::A>) -> Array2<Self::A> {
+//         self.dot(&mat)
+//     }
+// }
 
-impl<A, S> ConjMatMat for ArrayBase<S, Ix2>
-where
-    A: Scalar,
-    S: Data<Elem = A>,
-{
-    fn conj_matmat(&self, mat: ArrayView2<Self::A>) -> Array2<Self::A> {
-        mat.t()
-            .map(|item| item.conj())
-            .dot(self)
-            .t()
-            .map(|item| item.conj())
-    }
-}
+impl<A: Scalar, T: MatVec<A=A>> MatMat for T {}
+impl<A: Scalar, T: ConjMatVec<A=A>> ConjMatMat for T {}
+
+// impl<A, S> ConjMatMat for ArrayBase<S, Ix2>
+// where
+//     A: Scalar,
+//     S: Data<Elem = A>,
+// {
+//     fn conj_matmat(&self, mat: ArrayView2<Self::A>) -> Array2<Self::A> {
+//         mat.t()
+//             .map(|item| item.conj())
+//             .dot(self)
+//             .t()
+//             .map(|item| item.conj())
+//     }
+// }
 
 pub trait RelDiff {
     type A: Scalar;

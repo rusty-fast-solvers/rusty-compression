@@ -2,8 +2,42 @@
 //!
 //! This module defines traits for the randomized sampling of the range of a linear operator
 //! and the associated computation of randomized QR and Singular Value Decompositions.
-//! To use these routines for a custom linear operator simply implement the `MatVec` trait and
-//! if required the `ConjMatVec` trait.
+//!
+//! In many applications we want to complete an approximate low-rank approximation of a linear
+//! operator but do not have access to the whole matrix, or computing the full QR or SVD of a
+//! matrix is too expensive. In these cases techniques from randomized linear algebra can be used
+//! to compute approximate low-rank decompositions.
+//! 
+//! Assume we have an operator $A$. We have two conditions on $A$.
+//! 
+//! 1. We need to be able to compute $y=Ax$ for a given vector $x$.
+//! 2. We need to be able to compute $y=A^Hx$ for a given vector $x$.
+//! 
+//! These abilities are implemented through the traits [MatVec](crate::types::MatVec) and [ConjMatVec](crate::types::ConjMatVec).
+//! Implementing these traits also automatically implements the corresponding traits
+//! [MatMat](crate::types::MatMat) and [ConjMatMat](crate::types::ConjMatMat), which
+//! are the corresponding versions for multiplications with a matrix $X$ instead of a vector $x$.
+//! The routines in this module use the latter traits. For performance reasons it may sometimes be
+//! preferable to directly implement [MatMat](crate::types::MatMat) and [ConjMatMat](crate::types::ConjMatMat)
+//! instead of relying on the corresponding vector versions.
+//! 
+//! In the following we describe the traits in more detail.
+//! 
+//! - [`SampleRange`]: This trait can be used to randomly sample the range of an operator by specifying a target
+//! rank. It only requires the [MatMat](crate::types::MatMat) trait.
+//! - [`SampleRangePowerIteration`]: This trait is an improved version of [`SampleRange']. It uses a power
+//!   iteration to give a more precise result but requires the [ConjMatMat](crate::types::ConjMatMat) trait
+//!   to be implemented.
+//! - [`AdaptiveSampling`]: This trait samples the range of an operator adaptively through specifying
+//!   a target tolerance. The error tolerance is checked probabilistically.
+//! 
+//! Once we have sampled the range of an operator we can use the method 
+//! [compute_from_range_estimate](crate::qr::QRTraits::compute_from_range_estimate) of the
+//! [QRTraits](crate::qr::QRTraits) to obtain an approximate QR Decomposition of the operator, from
+//! which we can for example compute an interpolative decomposition. Alternatively, we can use
+//! the [corresponding method](crate::svd::SVDTraits::compute_from_range_estimate) to compute an
+//! approximate Singular Value Decomposition of the operator.
+
 
 use crate::qr::{QRTraits, QR};
 use crate::random_matrix::RandomMatrix;
@@ -25,13 +59,12 @@ pub trait SampleRange<A: Scalar> {
     /// Randomly sample the range of an operator.
     /// Return an approximate orthogonal basis of the dominant range.
     /// # Arguments
-    /// * `op`: The operator for which to sample the range.
     /// * `k`: The target rank of the basis for the range.
     /// * `p`: Oversampling parameter. `p` should be chosen small. A typical size
     ///      is p=5.
     /// * `rng`: The random number generator.
     fn sample_range_by_rank<R: Rng>(
-        op: &Self,
+        &self,
         k: usize,
         p: usize,
         rng: &mut R,
@@ -50,14 +83,13 @@ pub trait SampleRangePowerIteration<A: Scalar> {
     /// Randomly sample the range of an operator refined through a power iteration
     /// Return an approximate orthogonal basis of the dominant range.
     /// # Arguments
-    /// * `op`: The operator for which to sample the range.
     /// * `k`: The target rank of the basis for the range.
     /// * `p`: Oversampling parameter. `p` should be chosen small. A typical size
     ///      is p=5.
     /// * `it_count`: The number of steps in the power iteration. For `it_count = 0` the
     ///               routine is identical to `sample_range_by_rank`.
     fn sample_range_power_iteration<R: Rng>(
-        op: &Self,
+        &self,
         k: usize,
         p: usize,
         it_count: usize,
@@ -69,15 +101,15 @@ macro_rules! sample_range_impl {
     ($scalar:ty) => {
         impl<Op: MatMat<A = $scalar>> SampleRange<$scalar> for Op {
             fn sample_range_by_rank<R: Rng>(
-                op: &Self,
+                &self,
                 k: usize,
                 p: usize,
                 rng: &mut R,
             ) -> Result<Array2<$scalar>> {
-                let m = op.ncols();
+                let m = self.ncols();
 
                 let omega = <$scalar>::random_gaussian((m, k + p), rng);
-                let basis = op.matmat(omega.view());
+                let basis = self.matmat(omega.view());
 
                 let qr = QR::<$scalar>::compute_from(basis.view())?
                     .compress(CompressionType::RANK(k))?;
@@ -97,25 +129,25 @@ macro_rules! sample_range_power_impl {
     ($scalar:ty) => {
         impl<Op: ConjMatMat<A = $scalar>> SampleRangePowerIteration<$scalar> for Op {
             fn sample_range_power_iteration<R: Rng>(
-                op: &Op,
+                &self,
                 k: usize,
                 p: usize,
                 it_count: usize,
                 rng: &mut R,
             ) -> Result<Array2<$scalar>> {
-                let m = op.ncols();
+                let m = self.ncols();
 
                 let omega = <$scalar>::random_gaussian((m, k + p), rng);
-                let op_omega = op.matmat(omega.view());
+                let op_omega = self.matmat(omega.view());
                 let mut res = op_omega.clone();
 
                 for index in 0..it_count {
                     let qr = QR::<$scalar>::compute_from(op_omega.view())?;
                     let q = qr.get_q();
 
-                    let qr = QR::<$scalar>::compute_from(op.conj_matmat(q).view())?;
+                    let qr = QR::<$scalar>::compute_from(self.conj_matmat(q).view())?;
                     let w = qr.get_q();
-                    let op_omega = op.matmat(w);
+                    let op_omega = self.matmat(w);
                     if index == it_count - 1 {
                         res.assign(&op_omega);
                     }
@@ -170,7 +202,6 @@ impl_max_col_norm!(c64);
 pub trait AdaptiveSampling<A: Scalar> {
     /// Adaptively randomly sample the range of an operator up to a given tolerance.
     /// # Arguments
-    /// * `op`: The operator for which to sample the range.
     /// * `rel_tol`: The relative error tolerance. The error is checked probabilistically.
     /// * `sample_size`: Number of samples drawn together in each iteration.
     /// * `rng`: The random number generator.

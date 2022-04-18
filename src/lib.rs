@@ -1,10 +1,16 @@
 //! This library provides routines to compute low-rank approximations of matrices.
+//! 
+//! - [Overview](#overview)
+//! - [Random sampling of operators](random_sampling)
+//! - [Examples](examples)
+
+//! # Overview
 //! Let $A\in\mathbb{C}^{m\times n}$ be a given matrix. A low-rank approximation is
 //! a representation of the form
 //! $$
 //! A\approx UV^H
 //! $$
-//! with $U\in\mathbb{C}^{m\tmes k}$ and $V\in\mathbb{C}{n\times k}$, where $k$ is
+//! with $U\in\mathbb{C}^{m\times k}$ and $V\in\mathbb{C}^{n\times k}$, where $k$ is
 //! sufficiently small for the required application. A frequently used
 //! representation is also
 //! $$
@@ -18,11 +24,11 @@
 //! $$
 //! with $P$ a permutation matrix, $Q\in\mathbb{C}^{m\times \ell}$ a matrix
 //! with orthogonal columns of unit norm, $R\in\mathbb{C}^{\ell\times n}$
-//! upper triangular, and $\ell=\min\{m, n\}$.
+//! upper triangular, and $\ell=\min\\{m, n\\}$.
 //! 
 //! In a pivoted QR decomposition the diagonal elements of $R$
 //! are sorted in non-increasing order, that is $|r_{11}|\geq |r_{22}|\geq \dots$. 
-//! We can therefore compress $A$ by choosing in index $k$ and only keeping the first
+//! We can therefore compress $A$ by choosing an index $k$ and only keeping the first
 //! $k$ columns of $Q$ and the first $k$ rows of $R$. The library allows to choose the
 //! parameter $k$ directly or by a given tolerance $\tau$ such that 
 //! $\langle|\frac{r_{kk}}{r_{11}}\rangle|< \tau$.
@@ -39,12 +45,14 @@
 //! $$
 //! C = A[:, [i_1, i_2, \dots]],
 //! $$
-//! where $i_1, i_2, \dots$ are column indices. 
+//! that is a selection of columns of $A$ with
+//! indices $i_1, i_2, \dots$.
+//! 
 //! The column pivoted interpolative decomposition has
 //! the advantage that we are using columns of $A$ as low-rank basis, which in
 //! applications often have physical meaning as opposed to the columns of $Q$.
 //! 
-//! From the column pivoted decomposition we can also compute a two-sided
+//! From the column pivoted interpolative decomposition we can also compute a two-sided
 //! decomposition of the form
 //! $$
 //! A\approx C X R
@@ -52,8 +60,11 @@
 //! Here, $X$ is a $k\times k$ matrix, which is the submatrix of $A$ formed of the column indices
 //! $i_1, i_2, \dots$ and row indices $j_1, j_2, \dots$.
 //! 
+//! Similarly to a column interpolative decomposition, a corresponding row interpolative decomposition
+//! is available that selects rows of $A$ for the low rank approximation.
+//!
 
-
+pub mod examples;
 pub mod col_interp_decomp;
 pub mod compute_svd;
 pub mod types;
