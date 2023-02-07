@@ -1,7 +1,7 @@
 [package]
 name = "rusty-compression"
-version = "0.1.0"
-authors = ["Timo Betcke <timo.betcke@gmail.com>", "Srinath Kailasa"]
+version = "0.1.1"
+authors = ["Timo Betcke <timo.betcke@gmail.com>", "Srinath Kailasa <srinathkailasa@gmail.com>"]
 edition = "2018"
 description = "Low rank compression algorithms in Rust."
 license = "BSD-3-Clause"
@@ -16,8 +16,8 @@ name = "rusty_compression"
 
 [dependencies]
 num = "0.*"
-ndarray = "0.15"
-ndarray-linalg = "0.14"
+ndarray = "0.15.*"
+ndarray-linalg = "0.16.*"
 rand = "0.8"
 itertools = "0.10"
 rand_distr = "0.4"
@@ -27,7 +27,7 @@ thiserror = "1.0"
 
 [dev-dependencies]
 criterion = { version = "0.3", features = ["html_reports"] }
-ndarray-linalg = { version = "0.14", features = ["openblas-system"] }
+ndarray-linalg = { version = "0.16.*", features = ["openblas-system"] }
 plotters = "0.*"
 
 

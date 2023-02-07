@@ -101,7 +101,7 @@ mod imp {
                     r_mat.assign(&mat.slice(s![0..k, ..]));
                     let r_mat = r_mat.into_triangular(ndarray_linalg::UPLO::Upper);
 
-                    match lax::QR_::q(
+                    match lax::Lapack::q(
                         layout,
                         mat.as_slice_memory_order_mut().unwrap(),
                         tau.as_slice_memory_order_mut().unwrap(),
