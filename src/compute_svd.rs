@@ -2,7 +2,7 @@
 
 use crate::svd::SVD;
 use ndarray::ArrayView2;
-use ndarray_linalg::{SVDDCInto, UVTFlag};
+use ndarray_linalg::{SVDDCInto, JobSvd};
 use crate::types::{c32, c64, Result, Scalar, RustyCompressionError};
 
 pub(crate) trait ComputeSVD {
@@ -16,7 +16,7 @@ macro_rules! compute_svd_impl {
         impl ComputeSVD for $scalar {
             type A = $scalar;
             fn compute_svd(arr: ArrayView2<Self::A>) -> Result<SVD<Self::A>> {
-                let result = arr.to_owned().svddc_into(UVTFlag::Some);
+                let result = arr.to_owned().svddc_into(JobSvd::Some);
 
                 let (u, s, vt) = match result {
                     Ok((u, s, vt)) => (u.unwrap(), s, vt.unwrap()),

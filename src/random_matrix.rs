@@ -1,7 +1,7 @@
 //! Generation of random matrices for various types
 
 use ndarray::Array2;
-use ndarray_linalg::{Lapack, SVDDCInto, Scalar, UVTFlag};
+use ndarray_linalg::{Lapack, SVDDCInto, Scalar, JobSvd};
 use num::complex::Complex;
 use num::traits::cast::cast;
 use num::Float;
@@ -44,7 +44,7 @@ where
         let mat = Self::random_gaussian((m, n), rng);
 
         let (u, _, _) = mat
-            .svddc_into(UVTFlag::Some)
+            .svddc_into(JobSvd::Some)
             .expect("`compress_svd_rank_based`: SVD computation failed.");
 
         // If we originally had more columns than rows, conjugate transpose again.
